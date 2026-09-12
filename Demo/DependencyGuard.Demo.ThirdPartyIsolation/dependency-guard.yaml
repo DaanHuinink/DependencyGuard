@@ -1,0 +1,11 @@
+allowed:
+  - from: .*
+    to: System.*
+  - from: .*
+    to: Abstractions
+  - from: FileOperations.*
+    to: System.IO.*
+
+denied:
+  - from: .*
+    to: System.IO.*

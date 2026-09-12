@@ -1,0 +1,5 @@
+allowed:
+  - from: Application
+    to: Domain
+  - from: Infrastructure
+    to: Domain

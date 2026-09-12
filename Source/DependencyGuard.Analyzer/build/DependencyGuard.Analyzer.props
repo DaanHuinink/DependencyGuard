@@ -1,0 +1,18 @@
+<Project>
+
+  <PropertyGroup>
+    <DependencyGuardConfigPath Condition="'$(DependencyGuardConfigPath)' == ''">
+      $(MSBuildProjectDirectory)\dependency-guard.yaml
+    </DependencyGuardConfigPath>
+  </PropertyGroup>
+
+  <Target Name="DependencyGuard_AddConfig" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <AdditionalFiles Include="@(DependencyGuardConfig)"/>
+      <AdditionalFiles
+        Include="$(DependencyGuardConfigPath)"
+        Condition="Exists('$(DependencyGuardConfigPath)')"/>
+    </ItemGroup>
+  </Target>
+
+</Project>

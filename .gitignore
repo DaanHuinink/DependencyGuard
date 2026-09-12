@@ -1,0 +1,33 @@
+# Build output
+bin/
+obj/
+
+# NuGet
+packages/
+LocalPackages/*
+!LocalPackages/.gitkeep
+*.nupkg
+*.snupkg
+project.lock.json
+project.nuget.cache
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+riderModule.iml
+/_ReSharper.Caches/
+*.DotSettings.user
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coveragexml
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,7 @@
+allowed:
+  - from: .*
+    to: System.*
+  - from: Email
+    to: Notifications
+  - from: Sms
+    to: Notifications

@@ -1,0 +1,20 @@
+<Solution>
+
+  <Project Path="DependencyGuard.Demo.Notifications/DependencyGuard.Demo.Notifications.csproj" />
+  <Project Path="DependencyGuard.Demo.ImplementationIsolation/DependencyGuard.Demo.ImplementationIsolation.csproj" />
+  <Folder Name="/SharedConfig/">
+    <File Path="SharedConfig/dependency-guard.yaml" />
+    <File Path="SharedConfig/Directory.Build.props" />
+    <File Path="SharedConfig/README.md" />
+    <Project Path="SharedConfig/Customers/DependencyGuard.Demo.SharedConfig.Customers.csproj" />
+    <Project Path="SharedConfig/Orders/DependencyGuard.Demo.SharedConfig.Orders.csproj" />
+  </Folder>
+  <Folder Name="/SolutionItems/">
+    <File Path="Directory.Build.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="DependencyGuard.Demo.DependencyInversion/DependencyGuard.Demo.DependencyInversion.csproj" />
+  <Project Path="DependencyGuard.Demo.ThirdPartyIsolation/DependencyGuard.Demo.ThirdPartyIsolation.csproj" />
+  <Project Path="DependencyGuard.Demo.DenyList/DependencyGuard.Demo.DenyList.csproj" />
+
+</Solution>

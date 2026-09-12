@@ -1,0 +1,7 @@
+allowed:
+  - from: .*
+    to: .*
+
+denied:
+  - from: .*
+    to: System.Reflection.*

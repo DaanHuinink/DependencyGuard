@@ -1,0 +1,14 @@
+<Project>
+  <!-- Chain to Demo/Directory.Build.props so the shared project settings and the analyzer package reference are inherited. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    Both projects in this folder share one dependency-guard.yaml.
+    Setting DependencyGuardConfigPath here overrides the per-project default
+    ($(MSBuildProjectDirectory)\dependency-guard.yaml) for all projects
+    that inherit this Directory.Build.props.
+  -->
+  <PropertyGroup>
+    <DependencyGuardConfigPath>$(MSBuildThisFileDirectory)dependency-guard.yaml</DependencyGuardConfigPath>
+  </PropertyGroup>
+</Project>

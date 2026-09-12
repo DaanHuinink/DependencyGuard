@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- The demos are a separate solution that consumes the published analyzer package. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="DependencyGuard.Analyzer" Version="0.1.0-dev.20260913134747" />
+  </ItemGroup>
+
+</Project>

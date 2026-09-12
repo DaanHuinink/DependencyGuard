@@ -1,0 +1,7 @@
+allowed:
+  - from: .*
+    to: System.*
+  - from: Dispatching
+    to: External
+  - from: Internal.*
+    to: External
