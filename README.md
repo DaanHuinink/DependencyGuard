@@ -29,7 +29,7 @@ namespace MyApp.Domain;
 
 ## Requirements
 
-- **Analyzer:** .NET SDK 9.0.200 or later, or Visual Studio 2022 17.13 or later (Roslyn 4.13)
+- **Analyzer:** .NET SDK 9.0.200 or later.
 - **CLI tool:** .NET 8 runtime
 - **Building from source:** .NET 10 SDK
 
