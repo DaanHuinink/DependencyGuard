@@ -41,10 +41,8 @@ namespace MyApp.Domain;
    <PackageReference Include="DependencyGuard.Analyzer" Version="0.1.0" PrivateAssets="all" />
    ```
 
-   - `Version="*"` always takes the latest release, but builds are no longer reproducible.
-
 2. Add a `dependency-guard.yaml` to the project directory. It is picked up automatically.
-3. Build. Every violation is a DG0001 warning.
+3. Build. Every violation is a warning.
 
 ## Rules
 
@@ -74,7 +72,7 @@ denied:
 ```
 
 - The more specific rule wins.
-- An equally specific `allowed` and `denied` rule is a DG0003 conflict.
+- An equally specific `allowed` and `denied` rule is a conflict that's reported as an error.
 
 ### Related namespaces need rules too
 
