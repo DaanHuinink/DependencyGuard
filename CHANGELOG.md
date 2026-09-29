@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-beta.1 (2026-09-29)
+## 0.2.0-beta.2 (2026-09-29)
 
 The fixes are described, with examples, in [Docs/Bugs-0.1.md](Docs/Bugs-0.1.md).
 
