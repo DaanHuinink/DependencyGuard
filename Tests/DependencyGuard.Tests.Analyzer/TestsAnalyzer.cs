@@ -1134,4 +1134,45 @@ public sealed class TestsAnalyzer
             diagnostics.Select(d => d.GetMessage()).ToArray(),
             Is.EqualTo(new[] { "No rule allows 'MyApp.Web' to depend on 'MyApp.Infrastructure'." }));
     }
+
+    [Test]
+    public async Task Analyzer_ShouldNotReportAnInstanceMember_WhenItsClassIsNestedInAStaticClass()
+    {
+        // Arrange: `var` stands for Outer.Inner (reported once, there); reading its Value is no dependency of its own
+        const string yaml = """
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+              - from: MyApp.Domain
+                to: MyApp.Infrastructure
+            """;
+
+        const string source = """
+            namespace MyApp.Infrastructure
+            {
+                public static class Settings { public class Item { public int Value => 1; } }
+            }
+
+            namespace MyApp.Domain
+            {
+                public static class Factory { public static MyApp.Infrastructure.Settings.Item Create() { return new(); } }
+            }
+
+            namespace MyApp.Application
+            {
+                using MyApp.Domain;
+
+                public class Service
+                {
+                    public int Read() { var item = Factory.Create(); return item.Value; }
+                }
+            }
+            """;
+
+        // Act
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
+
+        // Assert
+        Assert.That(diagnostics.Select(d => SourceAt(d, source)).ToArray(), Is.EqualTo(new[] { "var" }));
+    }
 }

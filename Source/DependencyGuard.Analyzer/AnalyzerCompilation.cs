@@ -112,15 +112,32 @@ internal sealed class AnalyzerCompilation(
                 return [constructor.ContainingType];
 
             case IMethodSymbol or IPropertySymbol or IFieldSymbol or IEventSymbol when symbol.ContainingType is { } owner:
-                // A static class has only static and extension members: used without its name, a member comes from a
-                // using static or extends a value (an extension method). A static member of another class used without
-                // the class name comes from a using static, unless the class is this one, an outer one or a base class.
-                bool isImported = IsInStaticClass(owner) || (symbol.IsStatic && !IsEnclosingOrBaseType(owner, containingSymbol));
-                return isImported ? [owner] : [];
+                return IsImported(symbol, owner, containingSymbol) ? [owner] : [];
 
             default:
                 return [];
         }
+    }
+
+    // A member used without its type's name is a dependency on that type when it came in through a static using, or
+    // when it extends a value: an extension method, or a member of a C# 14 extension block. An instance member is not,
+    // and neither is a static member of this type, an outer one or a base class, which are in scope anyway.
+    private static bool IsImported(ISymbol member, INamedTypeSymbol owner, ISymbol? containingSymbol)
+    {
+        if (member is IMethodSymbol { ReducedFrom: not null } || owner.IsStatic || IsExtensionBlock(owner))
+        {
+            return true;
+        }
+
+        return member.IsStatic && !IsEnclosingOrBaseType(owner, containingSymbol);
+    }
+
+    // A C# 14 extension block is a type of its own kind inside a static class (TypeKind.Extension, which is newer than
+    // the Roslyn this analyzer is built against).
+    private static bool IsExtensionBlock(INamedTypeSymbol type)
+    {
+        return type.ContainingType is { IsStatic: true }
+               && type.TypeKind is not (TypeKind.Class or TypeKind.Struct or TypeKind.Interface or TypeKind.Enum or TypeKind.Delegate);
     }
 
     private static bool IsQualifiedByType(SimpleNameSyntax name, SemanticModel model)
@@ -133,19 +150,6 @@ internal sealed class AnalyzerCompilation(
         };
 
         return qualifier is not null && model.GetSymbolInfo(qualifier).Symbol is ITypeSymbol;
-    }
-
-    private static bool IsInStaticClass(INamedTypeSymbol type)
-    {
-        for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
-        {
-            if (current.IsStatic)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static bool IsEnclosingOrBaseType(INamedTypeSymbol owner, ISymbol? containingSymbol)

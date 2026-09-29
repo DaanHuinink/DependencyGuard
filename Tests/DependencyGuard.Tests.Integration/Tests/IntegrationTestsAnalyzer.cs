@@ -368,6 +368,43 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         Assert.That(output, Does.Contain("dependency-guard.yaml(2,5): error DG0004: Unknown key 'form'"), $"Output:\n{output}");
     }
 
+    [Test]
+    public async Task Build_ShouldReportDG0001AtTheUse_WhenExtensionMemberComesFromAnotherNamespace()
+    {
+        // Arrange: a C# 14 extension property, which the analyzer's own Roslyn (4.13) does not know
+        WriteCsproj("MyProject");
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """);
+        WriteSource("TextExtensions.cs", """
+            namespace MyApp.Infrastructure;
+            public static class TextExtensions
+            {
+                extension(string text)
+                {
+                    public string Shout => text.ToUpperInvariant();
+                }
+            }
+            """);
+        WriteSource("Service.cs", """
+            global using MyApp.Infrastructure;
+            namespace MyApp.Application;
+            public class Service
+            {
+                public string Greet() { return "hello".Shout; }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Service.cs(5,44): warning DG0001: No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+    }
+
     private Task<(string Output, int ExitCode)> BuildAsync()
     {
         return IntegrationSetupFixture.RunAsync("dotnet", "build", TestDirectory);
