@@ -159,4 +159,192 @@ public sealed class TestsDependencyRuleSetParserYaml
         // Assert
         Assert.That(ruleSet.Rules, Has.Count.EqualTo(2));
     }
+
+    [Test]
+    public void Parse_ShouldGiveZeroBasedLocations_WhenPathIsGiven()
+    {
+        // Arrange: the rule starts on the third line, in the fifth column
+        const string yaml = """
+            # rules
+            allowed:
+              - from: App
+                to: Domain
+            """;
+
+        // Act
+        DependencyRuleSet ruleSet = _parser.Parse(yaml, "dependency-guard.yaml");
+
+        // Assert
+        Assert.That(ruleSet.Rules[0].SourceLocation, Is.EqualTo(new SourceLocation("dependency-guard.yaml", 2, 4)));
+    }
+
+    [Test]
+    public void Parse_ShouldAcceptEmptySection_WhenSectionHasNoRules()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+            denied: []
+            """;
+
+        // Act
+        DependencyRuleSet ruleSet = _parser.Parse(yaml);
+
+        // Assert
+        Assert.That(ruleSet.Rules, Is.Empty);
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenSectionNameIsMisspelled()
+    {
+        // Arrange
+        const string yaml = """
+            allow:
+              - from: App
+                to: Domain
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml, "dependency-guard.yaml"));
+
+        // Assert
+        Assert.That(exception!.Errors, Has.Count.EqualTo(1));
+        Assert.That(exception.Errors[0].Message, Does.Contain("'allow'"));
+        Assert.That(exception.Errors[0].Location, Is.EqualTo(new SourceLocation("dependency-guard.yaml", 0, 0)));
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenRuleKeyIsMisspelled()
+    {
+        // Arrange: in a denied rule a typo would silently allow what the rule was meant to deny
+        const string yaml = """
+            denied:
+              - form: App
+                to: System.IO
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml, "dependency-guard.yaml"));
+
+        // Assert
+        Assert.That(exception!.Errors.Select(e => e.Message), Has.Some.Contains("'form'"));
+        Assert.That(exception.Errors.Select(e => e.Message), Has.Some.Contains("no 'from'"));
+        Assert.That(exception.Errors[0].Location!.Line, Is.EqualTo(1));
+    }
+
+    [TestCase("to: Domain", "no 'from'")]
+    [TestCase("from: App", "no 'to'")]
+    [TestCase("from: ''\n    to: Domain", "'from' is empty")]
+    public void Parse_ShouldReportError_WhenRuleIsIncomplete(string rule, string expected)
+    {
+        // Arrange
+        string yaml = $"""
+            allowed:
+              - {rule}
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors.Select(e => e.Message), Has.Some.Contains(expected));
+    }
+
+    [TestCase("MyApp.*.Api")]
+    [TestCase("MyApp*")]
+    [TestCase("MyApp.")]
+    [TestCase("My App")]
+    [TestCase("*")]
+    [TestCase("MyApp..Api")]
+    public void Parse_ShouldReportError_WhenPatternIsNotANamespacePattern(string pattern)
+    {
+        // Arrange
+        string yaml = $"""
+            allowed:
+              - from: App
+                to: "{pattern}"
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors.Select(e => e.Message), Has.Some.Contains("is not a namespace pattern"));
+    }
+
+    [TestCase(".*")]
+    [TestCase("MyApp")]
+    [TestCase("MyApp.Api.*")]
+    [TestCase("MyApp._Internal.V2")]
+    [TestCase("@class.Api")]
+    public void Parse_ShouldAcceptPattern_WhenPatternIsANamespacePattern(string pattern)
+    {
+        // Arrange
+        string yaml = $"""
+            allowed:
+              - from: App
+                to: "{pattern}"
+            """;
+
+        // Act
+        DependencyRuleSet ruleSet = _parser.Parse(yaml);
+
+        // Assert
+        Assert.That(ruleSet.Rules[0].ToNamespace, Is.EqualTo(pattern));
+    }
+
+    [Test]
+    public void Parse_ShouldReportEveryError_WhenFileHasSeveralMistakes()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+              - from: App
+                to: Domain.*.Api
+              - fromm: App
+                to: Domain
+            exposedTo: []
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert: the pattern, the unknown key, the missing 'from' and the unknown section
+        Assert.That(exception!.Errors, Has.Count.EqualTo(4));
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenRuleIsNotAMapping()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+              - App -> Domain
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors[0].Message, Does.Contain("A rule has a 'from' and a 'to'"));
+    }
+
+    [Test]
+    public void Parse_ShouldReportErrorWithLocation_WhenYamlIsMalformed()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+              - from: App
+               to: Domain
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml, "dependency-guard.yaml"));
+
+        // Assert
+        Assert.That(exception!.Errors, Has.Count.EqualTo(1));
+        Assert.That(exception.Errors[0].Location, Is.Not.Null);
+        Assert.That(exception.Message, Does.StartWith("dependency-guard.yaml("));
+    }
 }
