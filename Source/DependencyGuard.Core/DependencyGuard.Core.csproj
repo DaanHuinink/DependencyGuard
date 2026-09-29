@@ -6,7 +6,7 @@
 
     <!-- A package of its own, so a test can check what a rule file allows (DependencyGuardFactory). -->
     <PackageId>DependencyGuard.Core</PackageId>
-    <Version>0.2.0-beta.2</Version>
+    <Version>0.2.0-beta.3</Version>
     <Authors>Daan Huinink</Authors>
     <Description>
       The rules engine of DependencyGuard: read a dependency-guard.yaml and ask whether one namespace may depend on another.

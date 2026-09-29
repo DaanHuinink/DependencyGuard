@@ -1,4 +1,4 @@
-# Bugs in 0.1, and what 0.2.0-beta.2 does about them
+# Bugs in 0.1, and what 0.2.0-beta.3 does about them
 
 Found on 2026-09-28 and 29 while adding DependencyGuard to Quiz Night (a .NET 10 solution with Blazor components,
 `ImplicitUsings`, top-level statements and about 8,000 cross-namespace references), and while fixing what was found.
@@ -20,8 +20,9 @@ Each bug has a small example, the cause, the fix and the tests that keep it fixe
 | 12 | [CLI: `--help` is taken as the target, and so is any unknown option](#12-cli---help-is-taken-as-the-target-and-so-is-any-unknown-option) | Confusing errors | Fixed |
 | 13 | [CLI: `generate --output` fails for more than one project](#13-cli-generate---output-fails-for-more-than-one-project) | No solution-wide file | Fixed |
 | 14 | [CLI: `--config` replaces the project's own file](#14-cli---config-replaces-the-projects-own-file) | CLI and build disagree | Fixed |
-| 15 | [CLI and analyzer see different code](#15-cli-and-analyzer-see-different-code) | CLI and build disagree | Documented |
+| 15 | [CLI and analyzer see different code](#15-cli-and-analyzer-see-different-code) | CLI and build disagree | Fixed |
 | 16 | [Every test run leaves a package in the NuGet cache](#16-every-test-run-leaves-a-package-in-the-nuget-cache) | 58 stale versions on one machine | Fixed |
+| 17 | [Exact rules that can never meet are reported as a conflict](#17-exact-rules-that-can-never-meet-are-reported-as-a-conflict) | False DG0003 | Fixed |
 
 ## 1. Dependencies without a `using` line of their own are not checked
 
@@ -274,8 +275,17 @@ a project's folder and only their syntax: it misses linked files (`<Compile Incl
 files, fully qualified names in expressions (`System.Text.Encoding.UTF8`), and everything bug 1 is about; it includes
 files the project excludes.
 
-**Status.** Documented in the README, not fixed: doing better needs MSBuild evaluation and the compiler, which is what the
-analyzer has. In a build the analyzer is the reference.
+**Fix.** The CLI no longer reads syntax itself. It restores the projects, loads them with MSBuild through Roslyn's
+workspace (5.3, the compiler of the .NET 10 SDK: the same C# the build compiles), source generators included, and runs
+the analyzer on that compilation, with the rule files the build gives the project (or the `dependency-guard.yaml` in
+its folder, for a project without the package) and the `--config` files. `generate` runs the analyzer with a rule
+file that allows nothing and collects the namespaces every DG0001 carries as properties. The CLI now needs the .NET 10
+SDK, and a whole solution takes seconds (Quiz Night, 16 projects: about 15 s).
+
+**Tests.** `IntegrationTestsTool`: `Tool_ShouldReportTheUseInTheRazorFile_WhenComponentUsesDisallowedNamespace`,
+`Tool_ShouldReportDG0001_WhenTypeComesFromImplicitUsings`, `Tool_ShouldCheckALinkedFile_WhenProjectCompilesASourceFromElsewhere`,
+`Tool_ShouldUseTheRuleFilesOfTheBuild_WhenMSBuildGivesThemToTheProject`;
+`IntegrationTestsInspector.Generate_ShouldWriteWhatTheCompilerSees_WhenTypeComesFromImplicitUsings`.
 
 ## 16. Every test run leaves a package in the NuGet cache
 
@@ -285,3 +295,29 @@ with `0.1.0-dev.<time>`.
 
 **Fix.** The test projects and the demo solution restore into a folder of their own (`globalPackagesFolder` in their
 `NuGet.Config`): the tests' temporary folder, and `LocalPackages/Cache` for the demo.
+
+## 17. Exact rules that can never meet are reported as a conflict
+
+**What happens.** A false DG0003 for rules that no dependency matches both:
+
+```yaml
+allowed:
+  - from: Services
+    to: System            # exactly System, not System.IO
+denied:
+  - from: .*
+    to: System.IO.*
+```
+
+`generate` writes exact rules like the first one (for what the implicit usings bring in), so a generated file next to a
+hand-written deny failed with DG0003.
+
+**Cause.** `RuleSetValidator` checked whether one pattern's base starts with the other's, wildcard or not. That dates from
+when a bare pattern still matched its children (a comment in the analyzer tests says `to: System` "now" matches only
+`System`); two conflict tests still asserted it for exact rules.
+
+**Fix.** Only a wildcard covers other namespaces: `MyApp.*` is the parent of `MyApp.Api`, `.*` of everything, an exact
+`MyApp` of nothing. The two tests now use rules that really cross.
+
+**Tests.** `TestsConflictDetection.TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExactPatternsCannotMeet`, and the
+crossing tests in `TestsConflictDetection` and `TestsAnalyzer`.

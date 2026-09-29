@@ -32,7 +32,7 @@ namespace MyApp.Domain;
 ## Requirements
 
 - **Analyzer:** .NET SDK 9.0.200 or later.
-- **CLI tool:** .NET 8 runtime
+- **CLI tool:** .NET 10 SDK (it loads projects with MSBuild)
 - **Building from source:** .NET 10 SDK
 
 ## Roslyn analyzer
@@ -40,7 +40,7 @@ namespace MyApp.Domain;
 1. Add the package:
 
    ```xml
-   <PackageReference Include="DependencyGuard.Analyzer" Version="0.2.0-beta.2" PrivateAssets="all" />
+   <PackageReference Include="DependencyGuard.Analyzer" Version="0.2.0-beta.3" PrivateAssets="all" />
    ```
 
 2. Add a `dependency-guard.yaml` to the project directory. It is picked up automatically.
@@ -120,8 +120,7 @@ denied:
 - All files are merged into one rule set. Conflicts between files are DG0003.
 - Every file must be named `dependency-guard.yaml`.
 - To share one file instead of a file per project, set `DependencyGuardConfigPath` ([example](Demo/SharedConfig/README.md)).
-- The CLI does not read these MSBuild settings: give it the solution-wide file with `--config`; it is added to each
-  project's own file, as in the build.
+- The CLI reads these settings too: it loads the projects with MSBuild.
 
 ## Architectural patterns
 
@@ -198,19 +197,20 @@ dependency-guard generate MySolution.slnx   # write a starting config per projec
 dependency-guard check MySolution.slnx      # report violations
 ```
 
-- Checks projects without building them. Handy in CI.
-- Syntax only: it checks `using` directives and fully qualified names in the `.cs` files of a project's folder. It
-  does not see what the analyzer sees through the compiler: names from global, implicit or static usings, `var`,
-  `.razor` files and files linked from elsewhere. It reads `Outer.Inner` as namespace `Outer`.
+- Checks projects without building them, and reports exactly what the build reports: it restores them, loads them
+  with MSBuild (rule files, implicit usings, linked files, source generators such as Razor's) and runs the same
+  analyzer on the compilation. Handy in CI.
+- `--no-restore`: skip `dotnet restore` (the projects must be restored already).
 - `--help`, `--version`.
 
 ### generate
 
 ```
-dependency-guard generate [--output <path>] [--force] [<target>]
+dependency-guard generate [--output <path>] [--force] [--no-restore] [<target>]
 ```
 
-- Writes a `dependency-guard.yaml` per project that allows every dependency it has today.
+- Writes a `dependency-guard.yaml` per project that allows every dependency it has today: every name the analyzer
+  sees, including what the implicit usings bring in (`System.*`).
 - Then remove the rules for the dependencies you don't want.
 - `--output`, `-o`: write one file with the rules of every project, e.g. for the whole solution
 - `--force`: overwrite an existing file
@@ -219,14 +219,15 @@ dependency-guard generate [--output <path>] [--force] [<target>]
 ### check
 
 ```
-dependency-guard [check] [--config <path>]... [<target>]
+dependency-guard [check] [--config <path>]... [--no-restore] [<target>]
 ```
 
 - `check` is the default, so `dependency-guard <target>` works too.
 - `<target>`: a `.csproj`, `.sln` or `.slnx` file, or a directory. Default: the current directory.
-- `--config`, `-c`: a config for every project, merged with the project's own `dependency-guard.yaml`. May be
-  repeated.
-- Projects without any config are skipped.
+- The rule files of a project are the ones the build gives it (its `dependency-guard.yaml`, `DependencyGuardConfig`,
+  `DependencyGuardConfigPath`), or the `dependency-guard.yaml` in its folder when it has no DependencyGuard package.
+- `--config`, `-c`: a rule file (any name) for every project, merged with the project's own. May be repeated.
+- Projects without any rule file are skipped.
 - An unknown option is a usage error.
 - Exit codes: `0` no violations, `1` violations or an invalid config, `2` usage error
 
