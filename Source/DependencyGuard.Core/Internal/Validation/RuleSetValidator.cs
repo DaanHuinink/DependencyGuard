@@ -11,7 +11,6 @@ internal sealed class RuleSetValidator
         ValidateExactRuleConflicts(ruleSet, conflicts);
         ValidateCrossingSpecificityConflicts(ruleSet, conflicts);
         ValidateEqualSpecificityConflicts(ruleSet, conflicts);
-        ValidateExposedToConflicts(ruleSet, conflicts);
 
         return conflicts;
     }
@@ -107,21 +106,6 @@ internal sealed class RuleSetValidator
                     allow.SourceLocation,
                     deny.SourceLocation));
             }
-        }
-    }
-
-    private static void ValidateExposedToConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
-    {
-        foreach (IGrouping<string, ExposedToRule> group in (ruleSet.ExposedToRules ?? [])
-            .GroupBy(e => e.Namespace, StringComparer.Ordinal)
-            .Where(g => g.Count() > 1))
-        {
-            ExposedToRule first = group.First();
-            ExposedToRule second = group.Skip(1).First();
-            conflicts.Add(new(
-                $"Namespace '{group.Key}' has multiple exposedTo entries. Merge them into a single entry.",
-                first.SourceLocation,
-                second.SourceLocation));
         }
     }
 

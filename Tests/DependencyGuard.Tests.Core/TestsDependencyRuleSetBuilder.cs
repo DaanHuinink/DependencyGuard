@@ -57,34 +57,6 @@ public sealed class TestsDependencyRuleSetBuilder
 
         // Assert
         Assert.That(ruleSet.Rules, Is.Empty);
-        Assert.That(ruleSet.ExposedToRules, Is.Null);
-    }
-
-    [Test]
-    public void AddExposedTo_ShouldMergeConsumers_WhenSameNamespaceIsAddedTwice()
-    {
-        // Arrange & Act
-        DependencyRuleSet ruleSet = new DependencyRuleSetBuilder()
-            .AddExposedTo("MyApp.Infra", ["MyApp.Application"])
-            .AddExposedTo("MyApp.Infra", ["MyApp.Worker"])
-            .Build();
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(2));
-    }
-
-    [Test]
-    public void AddExposedTo_ShouldDeduplicateConsumers_WhenSameConsumerIsAddedTwice()
-    {
-        // Arrange & Act
-        DependencyRuleSet ruleSet = new DependencyRuleSetBuilder()
-            .AddExposedTo("MyApp.Infra", ["MyApp.Application"])
-            .AddExposedTo("MyApp.Infra", ["MyApp.Application"])
-            .Build();
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(1));
     }
 
     [Test]

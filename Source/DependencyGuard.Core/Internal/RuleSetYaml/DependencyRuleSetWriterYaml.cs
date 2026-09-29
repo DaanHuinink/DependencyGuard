@@ -28,13 +28,6 @@ internal sealed class DependencyRuleSetWriterYaml
             config.Denied = denied.Select(r => new RuleEntryYaml { From = r.FromNamespace, To = r.ToNamespace }).ToList();
         }
 
-        if (ruleSet.ExposedToRules is { Count: > 0 })
-        {
-            config.ExposedTo = ruleSet.ExposedToRules
-                .Select(e => new ExposedToEntryYaml { Namespace = e.Namespace, Consumers = [.. e.Consumers] })
-                .ToList();
-        }
-
         return Serializer.Serialize(config);
     }
 }

@@ -141,104 +141,6 @@ public sealed class TestsDependencyRuleSetParserYaml
     }
 
     [Test]
-    public void Parse_ShouldCreateExposedToRule_WhenExposedToSectionHasSingleEntry()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Namespace, Is.EqualTo("MyApp.Infra"));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers[0], Is.EqualTo("MyApp.Application"));
-    }
-
-    [Test]
-    public void Parse_ShouldCreateEveryConsumer_WhenExposedToEntryHasMultipleConsumers()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-                  - MyApp.Worker
-                  - MyApp.Admin
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(3));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Does.Contain("MyApp.Worker"));
-    }
-
-    [Test]
-    public void Parse_ShouldCreateExposedToRulesInOrder_WhenExposedToSectionHasMultipleEntries()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra.Database
-                consumers:
-                  - MyApp.Application
-              - namespace: MyApp.Infra.Messaging
-                consumers:
-                  - MyApp.Worker
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(2));
-        Assert.That(ruleSet.ExposedToRules![0].Namespace, Is.EqualTo("MyApp.Infra.Database"));
-        Assert.That(ruleSet.ExposedToRules![1].Namespace, Is.EqualTo("MyApp.Infra.Messaging"));
-    }
-
-    [Test]
-    public void Parse_ShouldReturnNoExposedToRules_WhenExposedToSectionIsMissing()
-    {
-        // Arrange
-        const string yaml = """
-            allowed:
-              - from: App
-                to: Domain
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules ?? [], Is.Empty);
-    }
-
-    [Test]
-    public void Parse_ShouldReturnEmptyConsumerList_WhenExposedToEntryHasNoConsumers()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Is.Empty);
-    }
-
-    [Test]
     public void Parse_ShouldParseEverySection_WhenAllSectionsArePresent()
     {
         // Arrange
@@ -249,11 +151,6 @@ public sealed class TestsDependencyRuleSetParserYaml
             denied:
               - from: App
                 to: System.IO
-            exposedTo:
-              - namespace: Domain.Shared
-                consumers:
-                  - Domain.Orders
-                  - Domain.Customers
             """;
 
         // Act
@@ -261,7 +158,5 @@ public sealed class TestsDependencyRuleSetParserYaml
 
         // Assert
         Assert.That(ruleSet.Rules, Has.Count.EqualTo(2));
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(2));
     }
 }

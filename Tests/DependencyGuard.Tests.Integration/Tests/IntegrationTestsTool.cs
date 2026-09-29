@@ -180,56 +180,6 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     }
 
     [Test]
-    public async Task Tool_ShouldExitWithCode1_WhenSourceIsNotPermittedExposedToConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Source.cs", """
-            namespace MyApp.UI;
-            using MyApp.Infra;
-            public class UiPage { }
-            """);
-
-        // Act
-        (string output, int exitCode) = await RunToolAsync(TestDirectory);
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
-        Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
-    }
-
-    [Test]
-    public async Task Tool_ShouldExitWithCode0_WhenSourceIsPermittedExposedToConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Source.cs", """
-            namespace MyApp.Application;
-            using MyApp.Infra;
-            public class UseCase { }
-            """);
-
-        // Act
-        (string output, int exitCode) = await RunToolAsync(TestDirectory);
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(0), $"Expected clean exit. Output:\n{output}");
-        Assert.That(output, Does.Not.Contain("DG0001"));
-    }
-
-    [Test]
     public async Task Tool_ShouldExitWithCode1_WhenChildSourceNamespaceViolatesRules()
     {
         // Arrange

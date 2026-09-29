@@ -59,10 +59,6 @@ public static class DependencyGuardFactory
             .SelectMany(r => r.Rules)
             .ToArray();
 
-        ExposedToRule[] exposedTo = ruleSets
-            .SelectMany(r => r.ExposedToRules ?? [])
-            .ToArray();
-
-        return new(rules, exposedTo);
+        return new(rules);
     }
 }

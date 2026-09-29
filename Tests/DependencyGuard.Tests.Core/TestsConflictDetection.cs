@@ -186,59 +186,6 @@ public sealed class TestsConflictDetection
     }
 
     [Test]
-    public void TryCreateAnalyzer_ShouldReportConflict_WhenExposedToNamespaceIsDuplicated()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-            [],
-            [
-                new ExposedToRule("MyApp.Infra", ["MyApp.Application"]),
-                new ExposedToRule("MyApp.Infra", ["MyApp.Worker"])
-            ]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
-
-        // Assert
-        Assert.That(conflicts, Has.Count.EqualTo(1));
-        Assert.That(conflicts[0].Message, Does.Contain("MyApp.Infra"));
-    }
-
-    [Test]
-    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExposedToNamespacesDiffer()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-            [],
-            [
-                new ExposedToRule("MyApp.Infra.Database", ["MyApp.Application"]),
-                new ExposedToRule("MyApp.Infra.Messaging", ["MyApp.Worker"])
-            ]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out IDependencyAnalyzer? analyzer);
-
-        // Assert
-        Assert.That(analyzer, Is.Not.Null);
-        Assert.That(conflicts, Is.Empty);
-    }
-
-    [Test]
-    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenSingleExposedToEntryListsMultipleConsumers()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-            [],
-            [new ExposedToRule("MyApp.Infra", ["MyApp.Application", "MyApp.Worker"])]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
-
-        // Assert
-        Assert.That(conflicts, Is.Empty);
-    }
-
-    [Test]
     public void TryCreateAnalyzer_ShouldReportEveryConflict_WhenMultiplePairsConflict()
     {
         // Arrange
@@ -273,25 +220,5 @@ public sealed class TestsConflictDetection
 
         // Assert
         Assert.That(conflicts, Has.Count.EqualTo(1));
-    }
-
-    [Test]
-    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExposedToAndDependencyRulesAreCompatible()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-        [
-            new("MyApp.Application", "MyApp.Domain", DependencyAction.Allow)
-        ],
-        [
-            new ExposedToRule("MyApp.Domain.Shared", ["MyApp.Domain.Orders", "MyApp.Domain.Customers"])
-        ]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out IDependencyAnalyzer? analyzer);
-
-        // Assert
-        Assert.That(analyzer, Is.Not.Null);
-        Assert.That(conflicts, Is.Empty);
     }
 }

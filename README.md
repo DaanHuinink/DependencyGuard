@@ -7,7 +7,7 @@ Namespace-level architecture rules for C#.
 - Dependency rules between namespaces, in a simple YAML file
 - **Nothing is allowed by default:** every dependency needs a rule
 - Violations show up as warnings in the IDE and the build, at the offending line
-- `allowed`, `denied` and `exposedTo` rules with wildcards
+- `allowed` and `denied` rules with wildcards
 - A config per project, one for the whole solution, or both
 - CLI tool for CI, with `generate` to create a starting config from existing code
 - No attributes, no base classes, no runtime cost
@@ -48,10 +48,8 @@ namespace MyApp.Domain;
 
 - **Nothing is allowed by default.**
 - `from`: the namespace that has the dependency. `to`: the namespace it depends on.
-- Checked in this order:
-  1. `allowed` / `denied` rules. The most specific `to` wins, then the most specific `from`.
-  2. `exposedTo`
-  3. Nothing matched: denied.
+- An `allowed` or `denied` rule decides. The most specific `to` wins, then the most specific `from`.
+- Nothing matched: denied.
 
 ### Patterns
 
@@ -85,21 +83,6 @@ denied:
     - from: MyApp.Orders.*
       to: MyApp.Orders.*
   ```
-
-### exposedTo
-
-```yaml
-exposedTo:
-  - namespace: MyApp.Infrastructure.*
-    consumers:
-      - MyApp.Application.*
-      - MyApp.Worker.*
-```
-
-- Limits who may use a namespace. Everyone else is denied.
-- Listed consumers need no separate `allowed` rule.
-- An `allowed` rule wins over `exposedTo`.
-- One entry per namespace. Duplicates are a DG0003 conflict.
 
 ### What is checked
 

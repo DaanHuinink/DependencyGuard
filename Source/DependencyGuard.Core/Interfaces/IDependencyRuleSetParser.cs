@@ -11,8 +11,7 @@ public sealed record SourceLocation(string FilePath, int Line, int Column);
 
 public sealed record DependencyRuleSet
 (
-    IReadOnlyList<DependencyRule> Rules,
-    IReadOnlyList<ExposedToRule>? ExposedToRules = null
+    IReadOnlyList<DependencyRule> Rules
 );
 
 public sealed record DependencyRule
@@ -22,12 +21,6 @@ public sealed record DependencyRule
     DependencyAction Action,
     SourceLocation? SourceLocation = null
 );
-
-public sealed record ExposedToRule
-(
-    string Namespace,
-    IReadOnlyList<string> Consumers,
-    SourceLocation? SourceLocation = null);
 
 public interface IDependencyRuleSetParser
 {

@@ -190,15 +190,14 @@ public sealed class TestsAnalyzer
     public async Task Analyzer_ShouldTreatAsSingleConfig_WhenConfigPathsAreDuplicated()
     {
         // Arrange
-        // If the duplicated path were loaded twice, the exposedTo entry would be declared twice → DG0003.
+        // An equally specific allow and deny are one conflict; loaded twice, they would be four.
         const string yaml = """
             allowed:
               - from: MyApp.Application
                 to: MyApp.Domain
-            exposedTo:
-              - namespace: MyApp.Domain
-                consumers:
-                  - MyApp.Application
+            denied:
+              - from: MyApp.Application
+                to: MyApp.Domain.*
             """;
 
         const string source = """
@@ -223,7 +222,8 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, additionalFiles);
 
         // Assert
-        Assert.That(diagnostics.Length, Is.EqualTo(0));
+        Assert.That(diagnostics.Length, Is.EqualTo(1));
+        Assert.That(diagnostics[0].Id, Is.EqualTo("DG0003"));
     }
 
     [Test]
@@ -567,187 +567,6 @@ public sealed class TestsAnalyzer
 
         // Assert
         Assert.That(diagnostics.Length, Is.EqualTo(0));
-    }
-
-    [Test]
-    public async Task Analyzer_ShouldReportNoDiagnostics_WhenSourceIsPermittedExposedToConsumer()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.Application
-            """;
-
-        const string source = """
-            namespace MyApp.Application
-            {
-                using MyApp.Infrastructure;
-            }
-
-            namespace MyApp.Infrastructure
-            {
-                class A { }
-            }
-            """;
-
-        // Act
-        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
-
-        // Assert
-        Assert.That(diagnostics.Length, Is.EqualTo(0));
-    }
-
-    [Test]
-    public async Task Analyzer_ShouldReportDG0001_WhenSourceIsNotPermittedExposedToConsumer()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.Application
-            """;
-
-        const string source = """
-            namespace MyApp.UI
-            {
-                using MyApp.Infrastructure;
-            }
-
-            namespace MyApp.Infrastructure
-            {
-                class A {}
-            }
-            """;
-
-        // Act
-        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
-
-        // Assert
-        Assert.That(diagnostics.Length, Is.EqualTo(1));
-        Assert.That(diagnostics[0].Id, Is.EqualTo("DG0001"));
-        Assert.That(diagnostics[0].GetMessage(), Does.Contain("only accessible to"));
-    }
-
-    [Test]
-    public async Task Analyzer_ShouldReportNoDiagnostics_WhenSourceIsSubNamespaceOfWildcardConsumer()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.Application.*
-            """;
-
-        const string source = """
-            namespace MyApp.Application.Orders
-            {
-                using MyApp.Infrastructure;
-            }
-
-            namespace MyApp.Infrastructure
-            {
-                class A { }
-            }
-            """;
-
-        // Act
-        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
-
-        // Assert
-        Assert.That(diagnostics.Length, Is.EqualTo(0));
-    }
-
-    [Test]
-    public async Task Analyzer_ShouldReportDG0001_WhenTargetIsSubNamespaceOfExposedToNamespace()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.Application
-            """;
-
-        const string source = """
-            namespace MyApp.UI
-            {
-                using MyApp.Infrastructure.Persistence;
-            }
-
-            namespace MyApp.Infrastructure.Persistence {}
-            """;
-
-        // Act
-        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
-
-        // Assert
-        Assert.That(diagnostics.Length, Is.EqualTo(1));
-        Assert.That(diagnostics[0].Id, Is.EqualTo("DG0001"));
-    }
-
-    [Test]
-    public async Task Analyzer_ShouldReportNoDiagnostics_WhenExplicitAllowOverridesExposedTo()
-    {
-        // Arrange
-        const string yaml = """
-            allowed:
-              - from: MyApp.UI
-                to: MyApp.Infrastructure
-            exposedTo:
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.Application
-            """;
-
-        const string source = """
-            namespace MyApp.UI
-            {
-                using MyApp.Infrastructure;
-            }
-
-            namespace MyApp.Infrastructure
-            {
-                class A { }
-            }
-            """;
-
-        // Act
-        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
-
-        // Assert
-        Assert.That(diagnostics.Length, Is.EqualTo(0));
-    }
-
-    [Test]
-    public async Task Analyzer_ShouldReportDG0003_WhenExposedToNamespaceIsDuplicated()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.Application
-              - namespace: MyApp.Infrastructure
-                consumers:
-                  - MyApp.UI
-            """;
-
-        const string source = """
-            namespace MyApp.Application
-            {
-                using MyApp.Infrastructure;
-            }
-            """;
-
-        // Act
-        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
-
-        // Assert
-        Assert.That(diagnostics.Any(d => d.Id == "DG0003"), Is.True);
     }
 
     [Test]
