@@ -7,6 +7,14 @@ namespace DependencyGuard.Tests.Analyzer.Infrastructure;
 
 internal static class AnalyzerRunner
 {
+    // Every assembly of the running .NET, so test sources can use LINQ, collections and the like.
+    private static readonly Lazy<MetadataReference[]> FrameworkReferences = new(() =>
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Where(path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
+            .ToArray());
+
     internal static Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
         string source,
         string? yamlConfig = null)
@@ -18,35 +26,40 @@ internal static class AnalyzerRunner
         string[] sources,
         string? yamlConfig)
     {
-        IEnumerable<(string path, string text)> additionalFiles = yamlConfig is null
-            ? []
-            : [(DependencyGuard.Analyzer.Analyzer.ConfigFileName, yamlConfig)];
-
-        return GetDiagnosticsAsync(sources, additionalFiles);
+        return GetDiagnosticsAsync(sources.Select(s => (string.Empty, s)).ToArray(), yamlConfig);
     }
 
     internal static Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
         string source,
         IEnumerable<(string path, string text)> additionalFiles)
     {
-        return GetDiagnosticsAsync([source], additionalFiles);
+        return GetDiagnosticsAsync([(string.Empty, source)], additionalFiles, new Dictionary<string, string>());
+    }
+
+    // Sources with a file path, e.g. "Page.razor.g.cs" to make the compiler treat one as generated code.
+    internal static Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
+        (string path, string text)[] sources,
+        string? yamlConfig,
+        IReadOnlyDictionary<string, string>? buildProperties = null)
+    {
+        IEnumerable<(string path, string text)> additionalFiles = yamlConfig is null
+            ? []
+            : [(DependencyGuard.Analyzer.Analyzer.ConfigFileName, yamlConfig)];
+
+        return GetDiagnosticsAsync(sources, additionalFiles, buildProperties ?? new Dictionary<string, string>());
     }
 
     private static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
-        string[] sources,
-        IEnumerable<(string path, string text)> additionalFiles)
+        (string path, string text)[] sources,
+        IEnumerable<(string path, string text)> additionalFiles,
+        IReadOnlyDictionary<string, string> buildProperties)
     {
-        SyntaxTree[] syntaxTrees = [.. sources.Select(s => CSharpSyntaxTree.ParseText(s))];
-
-        MetadataReference[] references =
-        [
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location)
-        ];
+        SyntaxTree[] syntaxTrees = [.. sources.Select(s => CSharpSyntaxTree.ParseText(s.text, path: s.path))];
 
         CSharpCompilation compilation = CSharpCompilation.Create(
             "TestProject",
             syntaxTrees,
-            references,
+            FrameworkReferences.Value,
             new(OutputKind.DynamicallyLinkedLibrary));
 
         ImmutableArray<AdditionalText> additionalTexts =
@@ -54,9 +67,12 @@ internal static class AnalyzerRunner
             ..additionalFiles.Select(AdditionalText (f) => new AdditionalTextInMemory(f.path, f.text))
         ];
 
+        // MSBuild hands a property to analyzers as build_property.<Name> (CompilerVisibleProperty).
+        Dictionary<string, string> globalOptions = buildProperties.ToDictionary(p => "build_property." + p.Key, p => p.Value);
+
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
             [new DependencyGuard.Analyzer.Analyzer()],
-            new AnalyzerOptions(additionalTexts));
+            new AnalyzerOptions(additionalTexts, new AnalyzerConfigOptionsProviderInMemory(globalOptions)));
 
         return await compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync();
     }
