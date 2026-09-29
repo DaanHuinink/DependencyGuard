@@ -1,51 +1,44 @@
 using System.Collections.Immutable;
 using DependencyGuard.Core.Interfaces;
+using DependencyGuard.Roslyn.Internal;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DependencyGuard.Analyzer;
+namespace DependencyGuard.Roslyn.Interfaces;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class Analyzer : DiagnosticAnalyzer
+public sealed class RoslynAnalyzer : DiagnosticAnalyzer
 {
     public const string ConfigFileName = "dependency-guard.yaml";
-
-    // Properties of every DG0001: the namespace that has the dependency and the one it depends on.
     public const string SourceNamespaceProperty = "SourceNamespace";
     public const string TargetNamespaceProperty = "TargetNamespace";
 
-    // MSBuild's RootNamespace (build/DependencyGuard.Analyzer.props makes it visible): the namespace of code that
-    // declares none, such as top-level statements.
     private const string RootNamespaceOption = "build_property.RootNamespace";
 
-    // The rule files when a host names them (the CLI's --config files may have any name); null in a build, where the
-    // rule files are the additional files named dependency-guard.yaml.
     private readonly IReadOnlyList<AdditionalText>? _ruleFiles;
 
-    public Analyzer()
+    public RoslynAnalyzer()
     {
     }
 
-    internal Analyzer(IReadOnlyList<AdditionalText> ruleFiles)
+    public RoslynAnalyzer(IReadOnlyList<AdditionalText> ruleFiles)
     {
         _ruleFiles = ruleFiles;
     }
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
     [
-        AnalyzerDiagnostics.WarningDisallowedDependency,
-        AnalyzerDiagnostics.WarningConfigurationMissing,
-        AnalyzerDiagnostics.ErrorConflictingRules,
-        AnalyzerDiagnostics.ErrorInvalidRuleFile,
-        AnalyzerDiagnostics.ErrorUnhandledException
+        RoslynAnalyzerDiagnostics.WarningDisallowedDependency,
+        RoslynAnalyzerDiagnostics.WarningConfigurationMissing,
+        RoslynAnalyzerDiagnostics.ErrorConflictingRules,
+        RoslynAnalyzerDiagnostics.ErrorInvalidRuleFile,
+        RoslynAnalyzerDiagnostics.ErrorUnhandledException
     ];
 
     public override void Initialize(AnalysisContext context)
     {
-        // Generated code is analyzed too, but only what a #line directive maps back to a file someone wrote is reported:
-        // the C# that Razor makes of a .razor file. What a generator adds on its own is skipped (AnalyzerCompilation).
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics);
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(OnCompilationStart);
@@ -60,7 +53,7 @@ public sealed class Analyzer : DiagnosticAnalyzer
         catch (Exception exception)
         {
             contextStart.RegisterCompilationEndAction(contextEnd =>
-                contextEnd.ReportDiagnostic(Diagnostic.Create(AnalyzerDiagnostics.ErrorUnhandledException, Location.None, exception)));
+                contextEnd.ReportDiagnostic(Diagnostic.Create(RoslynAnalyzerDiagnostics.ErrorUnhandledException, Location.None, exception)));
         }
     }
 
@@ -76,7 +69,7 @@ public sealed class Analyzer : DiagnosticAnalyzer
         {
             contextStart.RegisterCompilationEndAction(contextEnd =>
             {
-                Diagnostic configMissingDiagnostics = Diagnostic.Create(AnalyzerDiagnostics.WarningConfigurationMissing, Location.None);
+                Diagnostic configMissingDiagnostics = Diagnostic.Create(RoslynAnalyzerDiagnostics.WarningConfigurationMissing, Location.None);
                 contextEnd.ReportDiagnostic(configMissingDiagnostics);
             });
             return;
@@ -97,7 +90,7 @@ public sealed class Analyzer : DiagnosticAnalyzer
             throw new NullReferenceException("Analyzer can't be null when there are no conflicts.");
         }
 
-        AnalyzerCompilation compilation = new(
+        RoslynAnalyzerCompilation compilation = new(
             analyzer,
             configFiles,
             GetRootNamespace(contextStart),
@@ -107,8 +100,6 @@ public sealed class Analyzer : DiagnosticAnalyzer
         contextStart.RegisterSyntaxNodeAction(compilation.AnalyzeName, SyntaxKind.IdentifierName, SyntaxKind.GenericName);
     }
 
-    // Returns false when a rule file has mistakes: they are reported (DG0004) and nothing is checked, because checking
-    // against part of the rules would only add confusing DG0001s.
     private static bool TryCreateRuleSets(
 #pragma warning disable RS1013
         CompilationStartAnalysisContext contextStart,
@@ -133,13 +124,15 @@ public sealed class Analyzer : DiagnosticAnalyzer
             catch (RuleSetException exception)
             {
                 errors.AddRange(exception.Errors.Select(error => Diagnostic.Create(
-                    AnalyzerDiagnostics.ErrorInvalidRuleFile,
-                    error.Location is null ? Location.None : ToLocation(error.Location, configFiles),
+                    RoslynAnalyzerDiagnostics.ErrorInvalidRuleFile,
+                    error.Location is null
+                        ? Location.None
+                        : ToLocation(error.Location, configFiles),
                     error.Message)));
             }
             catch (Exception exception)
             {
-                errors.Add(Diagnostic.Create(AnalyzerDiagnostics.ErrorInvalidRuleFile, Location.None, $"{configFile.Path}: {exception.Message}"));
+                errors.Add(Diagnostic.Create(RoslynAnalyzerDiagnostics.ErrorInvalidRuleFile, Location.None, $"{configFile.Path}: {exception.Message}"));
             }
         }
 
@@ -194,7 +187,7 @@ public sealed class Analyzer : DiagnosticAnalyzer
                 ? [ToLocation(conflict.SecondaryLocation, configFiles)]
                 : [];
 
-            Diagnostic conflictingRulesDiagnostic = Diagnostic.Create(AnalyzerDiagnostics.ErrorConflictingRules,
+            Diagnostic conflictingRulesDiagnostic = Diagnostic.Create(RoslynAnalyzerDiagnostics.ErrorConflictingRules,
                 primary,
                 additional,
                 null,

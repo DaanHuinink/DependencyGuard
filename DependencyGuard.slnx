@@ -17,6 +17,7 @@
   </Folder>
   <Folder Name="/Source/">
     <Project Path="Source/DependencyGuard.Core/DependencyGuard.Core.csproj" />
+    <Project Path="Source/DependencyGuard.Roslyn/DependencyGuard.Roslyn.csproj" />
     <Project Path="Source/DependencyGuard.Analyzer/DependencyGuard.Analyzer.csproj" />
     <Project Path="Source/DependencyGuard.Cli/DependencyGuard.Cli.csproj" />
   </Folder>

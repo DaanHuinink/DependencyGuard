@@ -1,3 +1,4 @@
+using DependencyGuard.Roslyn.Interfaces;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.CodeAnalysis;
@@ -16,10 +17,10 @@ internal static class ProjectsAnalysis
     public static IReadOnlyList<AdditionalText> GetRuleFiles(Project project, IReadOnlyList<string> configPaths)
     {
         List<AdditionalText> ruleFiles = project.AnalyzerOptions.AdditionalFiles
-            .Where(f => string.Equals(Path.GetFileName(f.Path), Analyzer.Analyzer.ConfigFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(f => string.Equals(Path.GetFileName(f.Path), RoslynAnalyzer.ConfigFileName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        string projectFile = Path.Combine(Path.GetDirectoryName(project.FilePath)!, Analyzer.Analyzer.ConfigFileName);
+        string projectFile = Path.Combine(Path.GetDirectoryName(project.FilePath)!, RoslynAnalyzer.ConfigFileName);
         if (ruleFiles.Count == 0 && File.Exists(projectFile))
         {
             ruleFiles.Add(new AdditionalTextFile(projectFile));
@@ -35,7 +36,7 @@ internal static class ProjectsAnalysis
     // An empty rule file allows nothing, so every dependency is reported: that is what generate collects.
     public static IReadOnlyList<AdditionalText> GetEmptyRuleFile(Project project)
     {
-        string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", Analyzer.Analyzer.ConfigFileName);
+        string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", RoslynAnalyzer.ConfigFileName);
         return [new AdditionalTextFile(path, text: string.Empty)];
     }
 
@@ -50,7 +51,7 @@ internal static class ProjectsAnalysis
             [],
             new OptionsWithRootNamespace(project.AnalyzerOptions.AnalyzerConfigOptionsProvider, project.DefaultNamespace));
         ImmutableArray<Diagnostic> diagnostics = await compilation
-            .WithAnalyzers([new Analyzer.Analyzer(ruleFiles)], options)
+            .WithAnalyzers([new RoslynAnalyzer(ruleFiles)], options)
             .GetAnalyzerDiagnosticsAsync();
 
         return new(diagnostics, compileErrors);

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -44,7 +45,7 @@ internal static class AnalyzerRunner
     {
         IEnumerable<(string path, string text)> additionalFiles = yamlConfig is null
             ? []
-            : [(DependencyGuard.Analyzer.Analyzer.ConfigFileName, yamlConfig)];
+            : [(RoslynAnalyzer.ConfigFileName, yamlConfig)];
 
         return GetDiagnosticsAsync(sources, additionalFiles, buildProperties ?? new Dictionary<string, string>());
     }
@@ -71,7 +72,7 @@ internal static class AnalyzerRunner
         Dictionary<string, string> globalOptions = buildProperties.ToDictionary(p => "build_property." + p.Key, p => p.Value);
 
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
-            [new DependencyGuard.Analyzer.Analyzer()],
+            [new RoslynAnalyzer()],
             new AnalyzerOptions(additionalTexts, new AnalyzerConfigOptionsProviderInMemory(globalOptions)));
 
         return await compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync();

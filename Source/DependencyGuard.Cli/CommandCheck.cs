@@ -1,3 +1,4 @@
+using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
 
 namespace DependencyGuard.Cli;
@@ -69,7 +70,7 @@ internal static class CommandCheck
         IReadOnlyList<AdditionalText> ruleFiles = ProjectsAnalysis.GetRuleFiles(project, configPaths);
         if (ruleFiles.Count == 0)
         {
-            Console.WriteLine($"[skip] {project.Name}: no {Analyzer.Analyzer.ConfigFileName} found");
+            Console.WriteLine($"[skip] {project.Name}: no {RoslynAnalyzer.ConfigFileName} found");
             return (0, true);
         }
 

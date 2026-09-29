@@ -1,4 +1,5 @@
 using DependencyGuard.Core.Interfaces;
+using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
 
 namespace DependencyGuard.Cli;
@@ -55,7 +56,7 @@ internal static class CommandGenerate
         int errors = 0;
         foreach (IGrouping<string, Project> project in projects.GroupBy(p => p.FilePath!, StringComparer.OrdinalIgnoreCase))
         {
-            string outPath = Path.Combine(Path.GetDirectoryName(project.Key)!, Analyzer.Analyzer.ConfigFileName);
+            string outPath = Path.Combine(Path.GetDirectoryName(project.Key)!, RoslynAnalyzer.ConfigFileName);
             if (!CanWrite(outPath, force, Path.GetFileNameWithoutExtension(project.Key)))
             {
                 errors++;
@@ -104,8 +105,8 @@ internal static class CommandGenerate
 
         foreach (Diagnostic diagnostic in analysis.Diagnostics.Where(d => d.Id == "DG0001"))
         {
-            if (diagnostic.Properties.TryGetValue(Analyzer.Analyzer.SourceNamespaceProperty, out string? source) &&
-                diagnostic.Properties.TryGetValue(Analyzer.Analyzer.TargetNamespaceProperty, out string? target) &&
+            if (diagnostic.Properties.TryGetValue(RoslynAnalyzer.SourceNamespaceProperty, out string? source) &&
+                diagnostic.Properties.TryGetValue(RoslynAnalyzer.TargetNamespaceProperty, out string? target) &&
                 source is not null && target is not null)
             {
                 builder.AddAllow(source, target);

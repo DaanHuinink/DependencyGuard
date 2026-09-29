@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- The CLI loads projects the way the build does (MSBuild through Roslyn's workspace), which needs the .NET 10
-         SDK's MSBuild and a compiler that knows its C#. -->
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
 
@@ -17,8 +15,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DependencyGuard.Analyzer\DependencyGuard.Analyzer.csproj" />
     <ProjectReference Include="..\DependencyGuard.Core\DependencyGuard.Core.csproj" />
+    <ProjectReference Include="..\DependencyGuard.Roslyn\DependencyGuard.Roslyn.csproj" />
   </ItemGroup>
 
   <ItemGroup>

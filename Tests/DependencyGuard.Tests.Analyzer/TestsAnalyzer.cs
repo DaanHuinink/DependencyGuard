@@ -1,3 +1,4 @@
+using DependencyGuard.Roslyn.Interfaces;
 using System.Collections.Immutable;
 using DependencyGuard.Tests.Analyzer.Infrastructure;
 using Microsoft.CodeAnalysis;
@@ -214,8 +215,8 @@ public sealed class TestsAnalyzer
 
         (string, string)[] additionalFiles =
         [
-            (DependencyGuard.Analyzer.Analyzer.ConfigFileName, yaml),
-            (DependencyGuard.Analyzer.Analyzer.ConfigFileName, yaml)
+            (RoslynAnalyzer.ConfigFileName, yaml),
+            (RoslynAnalyzer.ConfigFileName, yaml)
         ];
 
         // Act
@@ -1064,7 +1065,7 @@ public sealed class TestsAnalyzer
         // Assert
         Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0004", "DG0004" }));
         FileLinePositionSpan place = diagnostics[0].Location.GetLineSpan();
-        Assert.That(place.Path, Is.EqualTo(DependencyGuard.Analyzer.Analyzer.ConfigFileName));
+        Assert.That(place.Path, Is.EqualTo(RoslynAnalyzer.ConfigFileName));
         Assert.That(place.StartLinePosition.Line, Is.EqualTo(1));
     }
 
@@ -1192,7 +1193,7 @@ public sealed class TestsAnalyzer
 
         // Assert
         Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
-        Assert.That(diagnostics[0].Properties[DependencyGuard.Analyzer.Analyzer.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
-        Assert.That(diagnostics[0].Properties[DependencyGuard.Analyzer.Analyzer.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
+        Assert.That(diagnostics[0].Properties[RoslynAnalyzer.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
+        Assert.That(diagnostics[0].Properties[RoslynAnalyzer.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
     }
 }

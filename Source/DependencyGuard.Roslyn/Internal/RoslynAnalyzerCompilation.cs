@@ -1,25 +1,34 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using DependencyGuard.Core.Interfaces;
+using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DependencyGuard.Analyzer;
+namespace DependencyGuard.Roslyn.Internal;
 
-// The checks for one compilation. A dependency is a name in the code that refers to a type in another namespace,
-// however that name came into scope: a using, a global or implicit using, an alias, a static using, an extension
-// method or simply the enclosing namespace. A plain `using Namespace;` is checked as well, where it is written.
-internal sealed class AnalyzerCompilation(
-    IDependencyAnalyzer analyzer,
-    IReadOnlyList<AdditionalText> configFiles,
-    string rootNamespace,
-    IAssemblySymbol assembly)
+internal sealed class RoslynAnalyzerCompilation
 {
-    // Razor copies the usings of _Imports.razor into every component: each of those lines is reported once.
+    private readonly IDependencyAnalyzer _analyzer;
+    private readonly IReadOnlyList<AdditionalText> _configFiles;
+    private readonly string _rootNamespace;
+    private readonly IAssemblySymbol _assembly;
     private readonly ConcurrentDictionary<string, bool> _reportedMappedUsings = new(StringComparer.Ordinal);
+
+    public RoslynAnalyzerCompilation(
+        IDependencyAnalyzer analyzer,
+        IReadOnlyList<AdditionalText> configFiles,
+        string rootNamespace,
+        IAssemblySymbol assembly)
+    {
+        _analyzer = analyzer;
+        _configFiles = configFiles;
+        _rootNamespace = rootNamespace;
+        _assembly = assembly;
+    }
 
     public void AnalyzeUsingDirective(SyntaxNodeAnalysisContext context)
     {
@@ -30,7 +39,6 @@ internal sealed class AnalyzerCompilation(
             return;
         }
 
-        // What a global, static or alias using brings in is checked where it is used (AnalyzeName).
         if (usingDirective.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword) ||
             usingDirective.StaticKeyword.IsKind(SyntaxKind.StaticKeyword) ||
             usingDirective.Alias is not null)
@@ -80,7 +88,6 @@ internal sealed class AnalyzerCompilation(
         }
     }
 
-    // The types a name makes the code depend on: none for a local, a parameter, a namespace or an instance member.
     private static IReadOnlyList<INamedTypeSymbol> GetReferencedTypes(SimpleNameSyntax name, SemanticModel model, ISymbol? containingSymbol)
     {
         ISymbol? symbol = model.GetSymbolInfo(name).Symbol;
@@ -89,7 +96,6 @@ internal sealed class AnalyzerCompilation(
             return [];
         }
 
-        // `var` stands for the type the compiler infers: that type and the types in it (List<Order>: List and Order).
         if (name is IdentifierNameSyntax { IsVar: true } && symbol is ITypeSymbol inferred)
         {
             HashSet<INamedTypeSymbol> inferredTypes = new(SymbolEqualityComparer.Default);
@@ -97,7 +103,6 @@ internal sealed class AnalyzerCompilation(
             return inferredTypes.ToArray();
         }
 
-        // In Outer.Inner or Type.Member the dependency is the name on the left, which is checked by itself.
         if (IsQualifiedByType(name, model))
         {
             return [];
@@ -108,21 +113,19 @@ internal sealed class AnalyzerCompilation(
             case INamedTypeSymbol { TypeKind: not TypeKind.Error } type:
                 return [type];
 
-            // The name of an attribute refers to its constructor.
             case IMethodSymbol { MethodKind: MethodKind.Constructor } constructor:
                 return [constructor.ContainingType];
 
             case IMethodSymbol or IPropertySymbol or IFieldSymbol or IEventSymbol when symbol.ContainingType is { } owner:
-                return IsImported(symbol, owner, containingSymbol) ? [owner] : [];
+                return IsImported(symbol, owner, containingSymbol)
+                    ? [owner]
+                    : [];
 
             default:
                 return [];
         }
     }
 
-    // A member used without its type's name is a dependency on that type when it came in through a static using, or
-    // when it extends a value: an extension method, or a member of a C# 14 extension block. An instance member is not,
-    // and neither is a static member of this type, an outer one or a base class, which are in scope anyway.
     private static bool IsImported(ISymbol member, INamedTypeSymbol owner, ISymbol? containingSymbol)
     {
         if (member is IMethodSymbol { ReducedFrom: not null } || owner.IsStatic || IsExtensionBlock(owner))
@@ -133,8 +136,7 @@ internal sealed class AnalyzerCompilation(
         return member.IsStatic && !IsEnclosingOrBaseType(owner, containingSymbol);
     }
 
-    // A C# 14 extension block is a type of its own kind inside a static class (TypeKind.Extension, which is newer than
-    // the Roslyn this analyzer is built against).
+    // TypeKind.Extension is newer than the Roslyn version this library builds against
     private static bool IsExtensionBlock(INamedTypeSymbol type)
     {
         return type.ContainingType is { IsStatic: true }
@@ -212,8 +214,6 @@ internal sealed class AnalyzerCompilation(
                && declaration.Name.Span.Contains(name.Span);
     }
 
-    // A using directive belongs to the namespace it is written in. One above all namespaces (the usual place next to a
-    // file-scoped namespace) serves the whole file: every namespace in it, and the root namespace for code outside them.
     private IEnumerable<string> GetUsingSourceNamespaces(UsingDirectiveSyntax usingDirective, SemanticModel model)
     {
         if (usingDirective.Parent is BaseNamespaceDeclarationSyntax declaration)
@@ -230,20 +230,20 @@ internal sealed class AnalyzerCompilation(
 
         if (namespaces.Count == 0 || file.Members.Any(member => member is not BaseNamespaceDeclarationSyntax))
         {
-            namespaces.Add(rootNamespace);
+            namespaces.Add(_rootNamespace);
         }
 
         return namespaces.Distinct(StringComparer.Ordinal);
     }
 
-    // The namespace code belongs to; code in no namespace belongs to the project's root namespace.
     private string GetNamespace(ISymbol? symbol)
     {
         INamespaceSymbol? ns = symbol as INamespaceSymbol ?? symbol?.ContainingNamespace;
-        return ns is null || ns.IsGlobalNamespace ? rootNamespace : ns.ToDisplayString();
+        return ns is null || ns.IsGlobalNamespace
+            ? _rootNamespace
+            : ns.ToDisplayString();
     }
 
-    // A type in no namespace belongs to its project: this project's root namespace, or else its assembly's name.
     private string GetNamespace(INamedTypeSymbol type)
     {
         if (type.ContainingNamespace is { IsGlobalNamespace: false } ns)
@@ -251,13 +251,11 @@ internal sealed class AnalyzerCompilation(
             return ns.ToDisplayString();
         }
 
-        return type.ContainingAssembly is null || SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, assembly)
-            ? rootNamespace
+        return type.ContainingAssembly is null || SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _assembly)
+            ? _rootNamespace
             : type.ContainingAssembly.Name;
     }
 
-    // Generated code is only checked where a #line directive maps it back to a file someone wrote, such as the C# that
-    // Razor makes of what is written in a .razor file.
     private static bool IsWrittenByHand(Location location)
     {
         return location.GetMappedLineSpan().HasMappedPath
@@ -279,21 +277,20 @@ internal sealed class AnalyzerCompilation(
             return;
         }
 
-        DependencyResult result = analyzer.AnalyzeDependency(new(sourceNamespace, targetNamespace));
+        DependencyResult result = _analyzer.AnalyzeDependency(new(sourceNamespace, targetNamespace));
         if (result.IsAllowed)
         {
             return;
         }
 
         Location[] ruleLocations = result.RuleLocation is not null
-            ? [Analyzer.ToLocation(result.RuleLocation, configFiles)]
+            ? [RoslynAnalyzer.ToLocation(result.RuleLocation, _configFiles)]
             : [];
 
-        // The namespaces as data, for tools: the CLI's generate collects them.
         ImmutableDictionary<string, string?> properties = ImmutableDictionary<string, string?>.Empty
-            .Add(Analyzer.SourceNamespaceProperty, sourceNamespace)
-            .Add(Analyzer.TargetNamespaceProperty, targetNamespace);
+            .Add(RoslynAnalyzer.SourceNamespaceProperty, sourceNamespace)
+            .Add(RoslynAnalyzer.TargetNamespaceProperty, targetNamespace);
 
-        report(Diagnostic.Create(AnalyzerDiagnostics.WarningDisallowedDependency, location, ruleLocations, properties, result.Reason));
+        report(Diagnostic.Create(RoslynAnalyzerDiagnostics.WarningDisallowedDependency, location, ruleLocations, properties, result.Reason));
     }
 }

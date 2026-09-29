@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Source\DependencyGuard.Analyzer\DependencyGuard.Analyzer.csproj" />
+    <ProjectReference Include="..\..\Source\DependencyGuard.Roslyn\DependencyGuard.Roslyn.csproj" />
   </ItemGroup>
 
 </Project>
