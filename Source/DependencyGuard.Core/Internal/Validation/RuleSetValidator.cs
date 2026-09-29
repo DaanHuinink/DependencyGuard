@@ -110,11 +110,14 @@ internal sealed class RuleSetValidator
     }
 
     // Compares pattern bases (stripping `.*` suffix) so wildcard patterns are treated correctly.
+    // `.*` has an empty base: it is the parent of every other pattern.
     private static bool PatternBaseIsStrictPrefix(string ancestor, string descendant)
     {
         string a = GetPatternBase(ancestor);
         string d = GetPatternBase(descendant);
-        return d.StartsWith(a + ".", StringComparison.Ordinal);
+        return a.Length == 0
+            ? d.Length > 0
+            : d.StartsWith(a + ".", StringComparison.Ordinal);
     }
 
     private static bool HaveSamePatternBase(string first, string second)
