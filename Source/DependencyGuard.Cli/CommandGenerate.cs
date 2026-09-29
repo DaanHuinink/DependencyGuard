@@ -11,27 +11,34 @@ internal static class CommandGenerate
 
     internal static int Run(string[] args)
     {
-        ParseArgs(args, out string targetPath, out string? outputPath, out bool force);
+        string? outputPath = null;
+        bool force = false;
+        Dictionary<string, Action<string>> valueOptions = new()
+        {
+            ["--output"] = value => outputPath = Path.GetFullPath(value),
+            ["-o"] = value => outputPath = Path.GetFullPath(value),
+        };
+        Dictionary<string, Action> flags = new() { ["--force"] = () => force = true };
+
+        string? usageError = Program.ParseArguments(args, valueOptions, flags, out string targetPath);
+        if (usageError is not null)
+        {
+            return Program.UsageError(usageError);
+        }
 
         if (!Program.TryResolveProjectFiles(targetPath, out List<string> projectFiles, out string? error))
         {
-            Program.PrintError(error);
-            return 2;
+            return Program.UsageError(error!);
         }
 
-        int errors = 0;
-        foreach (string projectFile in projectFiles)
-        {
-            if (!GenerateForProject(projectFile, outputPath, force))
-            {
-                errors++;
-            }
-        }
+        bool written = outputPath is null
+            ? GeneratePerProject(projectFiles, force)
+            : GenerateOneFile(projectFiles, outputPath, force);
 
         Console.WriteLine();
-        if (errors > 0)
+        if (!written)
         {
-            Program.PrintError($"Failed to generate for {errors} project(s).");
+            Program.PrintError("Generation failed.");
             return 2;
         }
 
@@ -39,56 +46,75 @@ internal static class CommandGenerate
         return 0;
     }
 
-    private static void ParseArgs(string[] args, out string targetPath, out string? outputPath, out bool force)
+    private static bool GeneratePerProject(IReadOnlyList<string> projectFiles, bool force)
     {
-        targetPath = Directory.GetCurrentDirectory();
-        outputPath = null;
-        force = false;
-
-        for (int i = 0; i < args.Length; i++)
+        int errors = 0;
+        foreach (string projectFile in projectFiles)
         {
-            if ((args[i] == "--output" || args[i] == "-o") && i + 1 < args.Length)
+            string outPath = Path.Combine(Path.GetDirectoryName(projectFile)!, DefaultOutputFileName);
+            if (!CanWrite(outPath, force, Path.GetFileNameWithoutExtension(projectFile)))
             {
-                outputPath = Path.GetFullPath(args[++i]);
+                errors++;
+                continue;
             }
-            else if (args[i] == "--force")
-            {
-                force = true;
-            }
-            else
-            {
-                targetPath = Path.GetFullPath(args[i]);
-            }
+
+            DependencyRuleSetBuilder builder = new();
+            CollectProject(projectFile, builder);
+            Write(builder, outPath);
         }
+
+        return errors == 0;
     }
 
-    private static bool GenerateForProject(string projectFile, string? outputPath, bool force)
+    // With --output, the rules of every project go into one file, e.g. one for the whole solution.
+    private static bool GenerateOneFile(IReadOnlyList<string> projectFiles, string outputPath, bool force)
     {
-        string projectDir = Path.GetDirectoryName(projectFile)!;
-        string projectName = Path.GetFileNameWithoutExtension(projectFile);
-        string outPath = outputPath ?? Path.Combine(projectDir, DefaultOutputFileName);
-
-        if (File.Exists(outPath) && !force)
+        if (!CanWrite(outputPath, force, "all projects"))
         {
-            Program.PrintError($"[error] {projectName}: '{outPath}' already exists. Use --force to overwrite.");
             return false;
         }
 
+        DependencyRuleSetBuilder builder = new();
+        foreach (string projectFile in projectFiles)
+        {
+            CollectProject(projectFile, builder);
+        }
+
+        Write(builder, outputPath);
+        return true;
+    }
+
+    private static bool CanWrite(string outPath, bool force, string subject)
+    {
+        if (File.Exists(outPath) && !force)
+        {
+            Program.PrintError($"[error] {subject}: '{outPath}' already exists. Use --force to overwrite.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void CollectProject(string projectFile, DependencyRuleSetBuilder builder)
+    {
+        string projectDir = Path.GetDirectoryName(projectFile)!;
+        string rootNamespace = Program.GetRootNamespace(projectFile);
         string[] sourceFiles = Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories)
             .Where(f => !Program.IsInObjOrBin(f, projectDir))
             .ToArray();
 
-        Console.WriteLine($"\n{projectName} ({sourceFiles.Length} files)");
-
-        DependencyRuleSetBuilder builder = new();
+        Console.WriteLine($"\n{Path.GetFileNameWithoutExtension(projectFile)} ({sourceFiles.Length} files)");
 
         foreach (string sourceFile in sourceFiles)
         {
             SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(sourceFile), path: sourceFile);
-            CollectUsingDependencies(tree, builder);
-            CollectQualifiedNameDependencies(tree, builder);
+            CollectUsingDependencies(tree, rootNamespace, builder);
+            CollectQualifiedNameDependencies(tree, rootNamespace, builder);
         }
+    }
 
+    private static void Write(DependencyRuleSetBuilder builder, string outPath)
+    {
         DependencyRuleSet ruleSet = builder.Build();
 
         IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer(
@@ -102,10 +128,9 @@ internal static class CommandGenerate
         string yaml = DependencyGuardFactory.SerializeToYaml(ruleSet);
         File.WriteAllText(outPath, yaml);
         Program.PrintSuccess($"  Written: {outPath}");
-        return true;
     }
 
-    private static void CollectUsingDependencies(SyntaxTree tree, DependencyRuleSetBuilder builder)
+    private static void CollectUsingDependencies(SyntaxTree tree, string rootNamespace, DependencyRuleSetBuilder builder)
     {
         foreach (UsingDirectiveSyntax usingDir in tree.GetCompilationUnitRoot().DescendantNodes().OfType<UsingDirectiveSyntax>())
         {
@@ -117,22 +142,17 @@ internal static class CommandGenerate
             }
 
             string targetNs = usingDir.NamespaceOrType.ToString();
-            string? sourceNs = Program.GetContainingNamespace(usingDir);
-            if (sourceNs is null)
+            foreach (string sourceNs in Program.GetUsingSourceNamespaces(usingDir, rootNamespace))
             {
-                continue;
+                if (targetNs != sourceNs)
+                {
+                    builder.AddAllow(sourceNs, targetNs);
+                }
             }
-
-            if (targetNs == sourceNs)
-            {
-                continue;
-            }
-
-            builder.AddAllow(sourceNs, targetNs);
         }
     }
 
-    private static void CollectQualifiedNameDependencies(SyntaxTree tree, DependencyRuleSetBuilder builder)
+    private static void CollectQualifiedNameDependencies(SyntaxTree tree, string rootNamespace, DependencyRuleSetBuilder builder)
     {
         foreach (QualifiedNameSyntax qualName in tree.GetCompilationUnitRoot()
             .DescendantNodes()
@@ -155,12 +175,7 @@ internal static class CommandGenerate
             }
 
             string targetNs = qualName.Left.ToString();
-            string? sourceNs = Program.GetContainingNamespace(qualName);
-            if (sourceNs is null)
-            {
-                continue;
-            }
-
+            string sourceNs = Program.GetContainingNamespace(qualName, rootNamespace);
             if (targetNs == sourceNs)
             {
                 continue;

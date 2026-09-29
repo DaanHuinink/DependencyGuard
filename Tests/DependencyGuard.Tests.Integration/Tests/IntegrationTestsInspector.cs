@@ -149,6 +149,61 @@ public sealed class IntegrationTestsInspector : IntegrationTestsBase
         Assert.That(yaml, Does.Not.Contain("from:"), $"Expected no rules. YAML:\n{yaml}");
     }
 
+    [Test]
+    public async Task Generate_ShouldWriteOneFileForAllProjects_WhenOutputIsGivenForASolution()
+    {
+        // Arrange
+        string first = Path.Combine(TestDirectory, "First");
+        string second = Path.Combine(TestDirectory, "Second");
+        Directory.CreateDirectory(first);
+        Directory.CreateDirectory(second);
+        WriteCsproj("First", first);
+        WriteCsproj("Second", second);
+        WriteSource("A.cs", "namespace MyApp.First;\nusing MyApp.Domain;\n", first);
+        WriteSource("B.cs", "namespace MyApp.Second;\nusing MyApp.Infrastructure;\n", second);
+        string solution = Path.Combine(TestDirectory, "Both.slnx");
+        File.WriteAllText(solution, """
+            <Solution>
+              <Project Path="First/First.csproj" />
+              <Project Path="Second/Second.csproj" />
+            </Solution>
+            """);
+        string output = Path.Combine(TestDirectory, "all.yaml");
+
+        // Act
+        (string log, int exitCode) = await RunGenerateAsync(solution, $"--output \"{output}\"");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{log}");
+        string yaml = await File.ReadAllTextAsync(output);
+        Assert.That(yaml, Does.Contain("from: MyApp.First"), $"YAML:\n{yaml}");
+        Assert.That(yaml, Does.Contain("from: MyApp.Second"), $"YAML:\n{yaml}");
+    }
+
+    [Test]
+    public async Task Generate_ShouldWriteTheFullNamespace_WhenNamespaceBlocksAreNested()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+        WriteSource("Service.cs", """
+            namespace MyApp
+            {
+                namespace Application
+                {
+                    using MyApp.Domain;
+                }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunGenerateAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        string yaml = await File.ReadAllTextAsync(ConfigPath);
+        Assert.That(yaml, Does.Contain("from: MyApp.Application"), $"YAML:\n{yaml}");
+    }
+
     private static Task<(string Output, int ExitCode)> RunGenerateAsync(string targetPath, string extraArgs = "")
     {
         return RunCliAsync($"generate {extraArgs} \"{targetPath}\"");

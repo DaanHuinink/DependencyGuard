@@ -11,18 +11,35 @@ internal static class CommandCheck
 
     internal static int Run(string[] args)
     {
-        if (!TryParseArgs(args, out string? globalConfigPath, out string targetPath, out string? error) ||
-            !Program.TryResolveProjectFiles(targetPath, out List<string> projectFiles, out error))
+        List<string> globalConfigPaths = [];
+        Dictionary<string, Action<string>> valueOptions = new()
         {
-            Program.PrintError(error);
-            return 2;
+            ["--config"] = value => globalConfigPaths.Add(Path.GetFullPath(value)),
+            ["-c"] = value => globalConfigPaths.Add(Path.GetFullPath(value)),
+        };
+
+        string? usageError = Program.ParseArguments(args, valueOptions, new Dictionary<string, Action>(), out string targetPath);
+        if (usageError is not null)
+        {
+            return Program.UsageError(usageError);
+        }
+
+        string? missingConfig = globalConfigPaths.FirstOrDefault(path => !File.Exists(path));
+        if (missingConfig is not null)
+        {
+            return Program.UsageError($"Config file not found: {missingConfig}");
+        }
+
+        if (!Program.TryResolveProjectFiles(targetPath, out List<string> projectFiles, out string? error))
+        {
+            return Program.UsageError(error!);
         }
 
         int totalViolations = 0;
         int invalidConfigs = 0;
         foreach (string projectFile in projectFiles)
         {
-            if (TryAnalyzeProject(projectFile, globalConfigPath, out int violations))
+            if (TryAnalyzeProject(projectFile, globalConfigPaths, out int violations))
             {
                 totalViolations += violations;
             }
@@ -52,48 +69,28 @@ internal static class CommandCheck
         return 0;
     }
 
-    private static bool TryParseArgs(string[] args, out string? globalConfigPath, out string targetPath, out string? error)
-    {
-        globalConfigPath = null;
-        targetPath = Directory.GetCurrentDirectory();
-        error = null;
-
-        for (int i = 0; i < args.Length; i++)
-        {
-            if ((args[i] == "--config" || args[i] == "-c") && i + 1 < args.Length)
-            {
-                globalConfigPath = Path.GetFullPath(args[++i]);
-            }
-            else
-            {
-                targetPath = Path.GetFullPath(args[i]);
-            }
-        }
-
-        if (globalConfigPath is not null && !File.Exists(globalConfigPath))
-        {
-            error = $"Config file not found: {globalConfigPath}";
-            return false;
-        }
-
-        return true;
-    }
-
     // Returns false when the project's configuration can't be parsed or contains conflicting rules.
-    private static bool TryAnalyzeProject(string projectFile, string? globalConfigPath, out int violations)
+    private static bool TryAnalyzeProject(string projectFile, IReadOnlyList<string> globalConfigPaths, out int violations)
     {
         violations = 0;
         string projectDir = Path.GetDirectoryName(projectFile)!;
         string projectName = Path.GetFileNameWithoutExtension(projectFile);
-        string configPath = globalConfigPath ?? Path.Combine(projectDir, DefaultConfigFileName);
 
-        if (!File.Exists(configPath))
+        // Like the analyzer: the --config files and the project's own file, merged.
+        string projectConfigPath = Path.Combine(projectDir, DefaultConfigFileName);
+        List<string> configPaths = [.. globalConfigPaths];
+        if (File.Exists(projectConfigPath) && !configPaths.Contains(projectConfigPath, StringComparer.OrdinalIgnoreCase))
+        {
+            configPaths.Add(projectConfigPath);
+        }
+
+        if (configPaths.Count == 0)
         {
             Console.WriteLine($"[skip] {projectName}: no {DefaultConfigFileName} found");
             return true;
         }
 
-        if (!TryLoadAnalyzer(configPath, projectName, out IDependencyAnalyzer? analyzer))
+        if (!TryLoadAnalyzer(configPaths, projectName, out IDependencyAnalyzer? analyzer))
         {
             return false;
         }
@@ -104,7 +101,8 @@ internal static class CommandCheck
 
         Console.WriteLine($"\n{projectName} ({sourceFiles.Length} files)");
 
-        violations = sourceFiles.Sum(f => AnalyzeFile(f, analyzer!));
+        string rootNamespace = Program.GetRootNamespace(projectFile);
+        violations = sourceFiles.Sum(f => AnalyzeFile(f, rootNamespace, analyzer!));
 
         if (violations == 0)
         {
@@ -114,40 +112,58 @@ internal static class CommandCheck
         return true;
     }
 
-    private static bool TryLoadAnalyzer(string configPath, string projectName, out IDependencyAnalyzer? analyzer)
+    private static bool TryLoadAnalyzer(IReadOnlyList<string> configPaths, string projectName, out IDependencyAnalyzer? analyzer)
     {
         analyzer = null;
-        try
+        List<DependencyRuleSet> ruleSets = [];
+        bool isValid = true;
+        foreach (string configPath in configPaths)
         {
-            DependencyRuleSet ruleSet = DependencyGuardFactory.ParseFromYaml(File.ReadAllText(configPath));
-            IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out analyzer);
-
-            if (conflicts.Count > 0)
+            try
             {
-                foreach (RuleConflict conflict in conflicts)
+                ruleSets.Add(DependencyGuardFactory.ParseFromYaml(File.ReadAllText(configPath), configPath));
+            }
+            catch (RuleSetException exception)
+            {
+                foreach (RuleSetError error in exception.Errors)
                 {
-                    Program.PrintError($"[error] {projectName}: {conflict.Message}");
+                    string place = error.Location is null
+                        ? configPath
+                        : $"{error.Location.FilePath}({error.Location.Line + 1},{error.Location.Column + 1})";
+                    Program.PrintError($"[error] {projectName}: {place}: error DG0004: {error.Message}");
                 }
 
-                return false;
+                isValid = false;
             }
-
-            return true;
+            catch (Exception ex)
+            {
+                Program.PrintError($"[error] {projectName}: failed to parse config {configPath}: {ex.Message}");
+                isValid = false;
+            }
         }
-        catch (Exception ex)
+
+        if (!isValid)
         {
-            Program.PrintError($"[error] {projectName}: failed to parse config: {ex.Message}");
             return false;
         }
+
+        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer(ruleSets, out analyzer);
+        foreach (RuleConflict conflict in conflicts)
+        {
+            Program.PrintError($"[error] {projectName}: {conflict.Message}");
+        }
+
+        return conflicts.Count == 0;
     }
 
-    private static int AnalyzeFile(string sourceFile, IDependencyAnalyzer analyzer)
+    private static int AnalyzeFile(string sourceFile, string rootNamespace, IDependencyAnalyzer analyzer)
     {
         SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(sourceFile), path: sourceFile);
-        return AnalyzeUsingDirectives(sourceFile, tree, analyzer) + AnalyzeQualifiedNames(sourceFile, tree, analyzer);
+        return AnalyzeUsingDirectives(sourceFile, tree, rootNamespace, analyzer)
+               + AnalyzeQualifiedNames(sourceFile, tree, rootNamespace, analyzer);
     }
 
-    private static int AnalyzeUsingDirectives(string sourceFile, SyntaxTree tree, IDependencyAnalyzer analyzer)
+    private static int AnalyzeUsingDirectives(string sourceFile, SyntaxTree tree, string rootNamespace, IDependencyAnalyzer analyzer)
     {
         int violations = 0;
 
@@ -161,24 +177,26 @@ internal static class CommandCheck
             }
 
             string targetNs = usingDir.NamespaceOrType.ToString();
-            string? sourceNs = Program.GetContainingNamespace(usingDir);
-            if (sourceNs is null)
+            foreach (string sourceNs in Program.GetUsingSourceNamespaces(usingDir, rootNamespace))
             {
-                continue;
-            }
+                if (targetNs == sourceNs)
+                {
+                    continue;
+                }
 
-            DependencyResult result = analyzer.AnalyzeDependency(new(sourceNs, targetNs));
-            if (!result.IsAllowed)
-            {
-                ReportViolation(sourceFile, usingDir.GetLocation(), result.Reason);
-                violations++;
+                DependencyResult result = analyzer.AnalyzeDependency(new(sourceNs, targetNs));
+                if (!result.IsAllowed)
+                {
+                    ReportViolation(sourceFile, usingDir.GetLocation(), result.Reason);
+                    violations++;
+                }
             }
         }
 
         return violations;
     }
 
-    private static int AnalyzeQualifiedNames(string sourceFile, SyntaxTree tree, IDependencyAnalyzer analyzer)
+    private static int AnalyzeQualifiedNames(string sourceFile, SyntaxTree tree, string rootNamespace, IDependencyAnalyzer analyzer)
     {
         int violations = 0;
 
@@ -203,12 +221,7 @@ internal static class CommandCheck
             }
 
             string targetNs = qualName.Left.ToString();
-            string? sourceNs = Program.GetContainingNamespace(qualName);
-            if (sourceNs is null)
-            {
-                continue;
-            }
-
+            string sourceNs = Program.GetContainingNamespace(qualName, rootNamespace);
             if (targetNs == sourceNs)
             {
                 continue;

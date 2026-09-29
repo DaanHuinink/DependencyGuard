@@ -80,7 +80,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     }
 
     [Test]
-    public async Task Tool_ShouldUseConfigFromFlag_WhenProjectHasItsOwnConfig()
+    public async Task Tool_ShouldMergeConfigFromFlagWithProjectConfig_WhenProjectHasItsOwnConfig()
     {
         // Arrange
         string configPath = Path.Combine(TestDirectory, "global.yaml");
@@ -90,7 +90,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
                 to: MyApp.Domain
             """);
 
-        // The project's own config allows the dependency; the --config file does not.
+        // The project's own config allows the dependency; the --config file adds its own rules to it.
         string projectDir = Path.Combine(TestDirectory, "project");
         Directory.CreateDirectory(projectDir);
         WriteCsproj("MyProject", projectDir);
@@ -109,8 +109,8 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
         (string output, int exitCode) = await RunToolAsync(projectDir, $"--config \"{configPath}\"");
 
         // Assert
-        Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
-        Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
+        Assert.That(exitCode, Is.EqualTo(0), $"Expected clean exit. Output:\n{output}");
+        Assert.That(output, Does.Not.Contain("DG0001"), $"Output:\n{output}");
     }
 
     [Test]
@@ -176,7 +176,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
 
         // Assert
         Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
-        Assert.That(output, Does.Contain("failed to parse config"), $"Expected parse error. Output:\n{output}");
+        Assert.That(output, Does.Contain("error DG0004"), $"Expected a DG0004 for the rule file. Output:\n{output}");
     }
 
     [Test]
@@ -253,6 +253,120 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
         // Assert
         Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
         Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldShowUsageAndExitWithCode0_WhenHelpIsAsked()
+    {
+        // Act
+        (string output, int exitCode) = await RunCliAsync("--help");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Usage:"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldShowTheVersion_WhenVersionIsAsked()
+    {
+        // Act
+        (string output, int exitCode) = await RunCliAsync("--version");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output.Trim(), Does.Match(@"^\d+\.\d+\.\d+"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldExitWithCode2_WhenOptionIsUnknown()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory, "--confg rules.yaml");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(2), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Unknown option: --confg"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldMergeEveryConfigFromFlags_WhenFlagIsRepeated()
+    {
+        // Arrange
+        string domainRules = Path.Combine(TestDirectory, "domain.yaml");
+        File.WriteAllText(domainRules, """
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """);
+        string infrastructureRules = Path.Combine(TestDirectory, "infrastructure.yaml");
+        File.WriteAllText(infrastructureRules, """
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Infrastructure
+            """);
+        WriteCsproj("MyProject");
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            using MyApp.Domain;
+            using MyApp.Infrastructure;
+            public class Service { }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory, $"-c \"{domainRules}\" --config \"{infrastructureRules}\"");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldUseTheProjectName_WhenFileHasNoNamespace()
+    {
+        // Arrange
+        WriteCsproj("MyProject", properties: "<OutputType>Exe</OutputType>");
+        WriteYaml("""
+            allowed:
+              - from: MyProject
+                to: MyApp.Domain
+            """);
+        WriteSource("Program.cs", """
+            using MyApp.Domain;
+            using MyApp.Infrastructure;
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyProject' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+        Assert.That(output, Does.Not.Contain("to depend on 'MyApp.Domain'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldReportTheLine_WhenRuleFileHasATypo()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+        WriteYaml("""
+            denied:
+              - from: MyApp.Application
+                too: System.IO
+            """);
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            public class Service { }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("dependency-guard.yaml(3,5): error DG0004: Unknown key 'too'"), $"Output:\n{output}");
     }
 
     private static Task<(string Output, int ExitCode)> RunToolAsync(string targetPath, string extraArgs = "")

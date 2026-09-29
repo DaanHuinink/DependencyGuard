@@ -30,16 +30,18 @@ public abstract class IntegrationTestsBase
         }
     }
 
-    protected void WriteCsproj(string name, string? dir = null)
+    protected void WriteCsproj(string name, string? dir = null, string properties = "", string sdk = "Microsoft.NET.Sdk", string items = "")
     {
         File.WriteAllText(Path.Combine(dir ?? TestDirectory, $"{name}.csproj"), $"""
-            <Project Sdk="Microsoft.NET.Sdk">
+            <Project Sdk="{sdk}">
               <PropertyGroup>
                 <TargetFramework>net10.0</TargetFramework>
                 <Nullable>enable</Nullable>
+                {properties}
               </PropertyGroup>
               <ItemGroup>
                 {ProjectItems}
+                {items}
               </ItemGroup>
             </Project>
             """);
