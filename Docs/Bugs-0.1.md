@@ -235,7 +235,10 @@ only consulted when no `allowed` or `denied` rule matched. Next to the common `a
 ever allow.
 
 **Status.** Not fixed: `exposedTo` was removed on the owner's request (first commit of this branch). A limit is written as
-a `denied` rule for everyone plus an `allowed` rule for the consumers.
+a `denied` rule with the same `from` as the broader `allowed` rule, plus `allowed` rules for the consumers. For the
+example, that is `denied: .* → System.IO.Compression.*` and `allowed: MyApp.Storage.* → System.IO.Compression.*`. A
+`denied` rule with a broader `from` than the `allowed` rule it limits crosses it: next to `allowed: MyApp.* → MyApp.*`, a
+`denied: .* → MyApp.Internal.*` is a DG0003. The deny needs `from: MyApp.*`.
 
 ## 12. CLI: `--help` is taken as the target, and so is any unknown option
 

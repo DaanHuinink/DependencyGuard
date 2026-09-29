@@ -26,7 +26,9 @@ The fixes are described, with examples, in [Docs/Bugs-0.1.md](Docs/Bugs-0.1.md).
 
 ### Removed
 
-- `exposedTo`. Write a `denied` rule for everyone and an `allowed` rule for the consumers instead.
+- `exposedTo`. Nothing is allowed by default, so `allowed` rules for the consumers are usually enough. To limit what a
+  broader `allowed` rule lets in, add a `denied` rule with the same `from` as that rule, plus `allowed` rules for the
+  consumers. A `denied` rule with a broader `from` would cross the `allowed` rule (DG0003).
 
 ### Fixed
 
