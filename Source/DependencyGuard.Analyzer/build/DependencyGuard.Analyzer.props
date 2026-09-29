@@ -6,7 +6,6 @@
     </DependencyGuardConfigPath>
   </PropertyGroup>
 
-  <!-- Code without a namespace (top-level statements) belongs to the project's root namespace. -->
   <ItemGroup>
     <CompilerVisibleProperty Include="RootNamespace" />
   </ItemGroup>

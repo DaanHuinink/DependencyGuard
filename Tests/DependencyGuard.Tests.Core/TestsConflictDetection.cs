@@ -225,7 +225,7 @@ public sealed class TestsConflictDetection
     [Test]
     public void TryCreateAnalyzer_ShouldReportConflict_WhenCrossingAllowComesFromEveryNamespace()
     {
-        // Arrange: the deny names MyApp, yet for MyApp → System.IO the allow would win on its more specific target
+        // Arrange
         DependencyRuleSet ruleSet = new(
         [
             new(".*", "System.IO.*", DependencyAction.Allow),
@@ -243,7 +243,7 @@ public sealed class TestsConflictDetection
     [Test]
     public void TryCreateAnalyzer_ShouldReportConflict_WhenCrossingDenyComesFromEveryNamespace()
     {
-        // Arrange: the allow names MyApp, yet for MyApp → System.IO the deny would win on its more specific target
+        // Arrange
         DependencyRuleSet ruleSet = new(
         [
             new("MyApp.*", "System.*", DependencyAction.Allow),
@@ -261,7 +261,7 @@ public sealed class TestsConflictDetection
     [Test]
     public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenDenyCarvesOutOfAnAllowForEveryNamespace()
     {
-        // Arrange: the usual carve-out: everyone may use System, except System.IO in MyApp.Core
+        // Arrange
         DependencyRuleSet ruleSet = new(
         [
             new(".*", "System.*", DependencyAction.Allow),
@@ -280,8 +280,7 @@ public sealed class TestsConflictDetection
     public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExactPatternsCannotMeet(
         string allowFrom, string allowTo, string denyFrom, string denyTo)
     {
-        // Arrange: an exact pattern covers nothing below it, so no dependency matches both rules (generate writes exact
-        // rules like the first, which then meet the deny of a hand-written file)
+        // Arrange
         DependencyRuleSet ruleSet = new(
         [
             new(allowFrom, allowTo, DependencyAction.Allow),

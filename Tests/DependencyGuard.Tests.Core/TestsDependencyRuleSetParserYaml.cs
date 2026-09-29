@@ -163,7 +163,7 @@ public sealed class TestsDependencyRuleSetParserYaml
     [Test]
     public void Parse_ShouldGiveZeroBasedLocations_WhenPathIsGiven()
     {
-        // Arrange: the rule starts on the third line, in the fifth column
+        // Arrange
         const string yaml = """
             # rules
             allowed:
@@ -218,7 +218,7 @@ public sealed class TestsDependencyRuleSetParserYaml
     [Test]
     public void Parse_ShouldReportError_WhenRuleKeyIsMisspelled()
     {
-        // Arrange: in a denied rule a typo would silently allow what the rule was meant to deny
+        // Arrange
         const string yaml = """
             denied:
               - form: App
@@ -311,7 +311,7 @@ public sealed class TestsDependencyRuleSetParserYaml
         // Act
         RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
 
-        // Assert: the pattern, the unknown key, the missing 'from' and the unknown section
+        // Assert
         Assert.That(exception!.Errors, Has.Count.EqualTo(4));
     }
 

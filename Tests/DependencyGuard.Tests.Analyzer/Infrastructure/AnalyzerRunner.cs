@@ -8,7 +8,6 @@ namespace DependencyGuard.Tests.Analyzer.Infrastructure;
 
 internal static class AnalyzerRunner
 {
-    // Every assembly of the running .NET, so test sources can use LINQ, collections and the like.
     private static readonly Lazy<MetadataReference[]> FrameworkReferences = new(() =>
         ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -37,7 +36,6 @@ internal static class AnalyzerRunner
         return GetDiagnosticsAsync([(string.Empty, source)], additionalFiles, new Dictionary<string, string>());
     }
 
-    // Sources with a file path, e.g. "Page.razor.g.cs" to make the compiler treat one as generated code.
     internal static Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
         (string path, string text)[] sources,
         string? yamlConfig,
@@ -55,7 +53,9 @@ internal static class AnalyzerRunner
         IEnumerable<(string path, string text)> additionalFiles,
         IReadOnlyDictionary<string, string> buildProperties)
     {
-        SyntaxTree[] syntaxTrees = [.. sources.Select(s => CSharpSyntaxTree.ParseText(s.text, path: s.path))];
+        SyntaxTree[] syntaxTrees = sources
+            .Select(s => CSharpSyntaxTree.ParseText(s.text, path: s.path))
+            .ToArray();
 
         CSharpCompilation compilation = CSharpCompilation.Create(
             "TestProject",
@@ -68,7 +68,6 @@ internal static class AnalyzerRunner
             ..additionalFiles.Select(AdditionalText (f) => new AdditionalTextInMemory(f.path, f.text))
         ];
 
-        // MSBuild hands a property to analyzers as build_property.<Name> (CompilerVisibleProperty).
         Dictionary<string, string> globalOptions = buildProperties.ToDictionary(p => "build_property." + p.Key, p => p.Value);
 
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(

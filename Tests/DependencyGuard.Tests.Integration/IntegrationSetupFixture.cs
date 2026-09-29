@@ -33,7 +33,7 @@ public sealed class IntegrationSetupFixture
 
         Assert.That(packExitCode, Is.EqualTo(0), $"Pack failed:\n{packOutput}");
 
-        // Build the CLI once; the tests start the built assembly.
+        // Build the CLI once so the tests can start the built assembly.
         (string buildOutput, int buildExitCode) = await RunAsync("dotnet", $"build \"{ToolProjectPath}\" -c Debug");
 
         Assert.That(buildExitCode, Is.EqualTo(0), $"CLI build failed:\n{buildOutput}");

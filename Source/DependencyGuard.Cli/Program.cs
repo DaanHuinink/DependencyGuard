@@ -12,22 +12,20 @@ internal static class Program
 
         <target>  A .csproj, .sln or .slnx file, or a folder with a .csproj. Default: the current folder.
 
-        check     Checks every project the way the build does (the same analyzer, on the same compilation) against its
-                  rule files, merged with the --config files.
+        check     Checks every project against its rule files and the --config files.
                   Exit codes: 0 no violations, 1 violations or an invalid rule file, 2 usage error.
-        generate  Writes a dependency-guard.yaml that allows every dependency the code has today: one per project,
+        generate  Writes a dependency-guard.yaml per project that allows every dependency the code has today,
                   or one for all projects with --output. Exit codes: 0 written, 2 failed or usage error.
 
         Options:
           -c, --config <file>  A rule file for every project, on top of the project's own. May be repeated.
           -o, --output <file>  Write one rule file for all projects.
               --force          Overwrite an existing rule file.
-              --no-restore     Skip 'dotnet restore' (the projects must be restored already).
+              --no-restore     Skip 'dotnet restore'.
           -h, --help           Show this help.
               --version        Show the version.
 
-        Needs the .NET 10 SDK: MSBuild evaluates the projects and they are compiled in memory, source generators
-        (Razor) included, without a build.
+        Needs the .NET 10 SDK.
         """;
 
     private static async Task<int> Main(string[] args)
@@ -82,14 +80,14 @@ internal static class Program
                          ?? typeof(Program).Assembly.GetName().Version?.ToString()
                          ?? "unknown";
 
-        // The SDK appends the commit (1.2.3+abcdef): the version alone is enough here.
         return version.Split('+')[0];
     }
 
-    // Like the build: path(line,column): severity id: message, with the path of the .razor file for Razor code.
     internal static string Format(Diagnostic diagnostic)
     {
-        string severity = diagnostic.Severity == DiagnosticSeverity.Error ? "error" : "warning";
+        string severity = diagnostic.Severity == DiagnosticSeverity.Error
+            ? "error"
+            : "warning";
         string text = $"{severity} {diagnostic.Id}: {diagnostic.GetMessage()}";
         if (diagnostic.Location == Location.None)
         {
@@ -121,7 +119,6 @@ internal static class Program
         Console.ResetColor();
     }
 
-    // Reads `--name value` options, flags and at most one target; returns an error for anything else.
     internal static string? ParseArguments(
         string[] args,
         IReadOnlyDictionary<string, Action<string>> valueOptions,

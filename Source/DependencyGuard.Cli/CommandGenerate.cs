@@ -50,7 +50,6 @@ internal static class CommandGenerate
         return 0;
     }
 
-    // A file next to each project; a project that targets several frameworks gets the rules of all of them.
     private static async Task<bool> GeneratePerProjectAsync(IReadOnlyList<Project> projects, bool force)
     {
         int errors = 0;
@@ -75,7 +74,6 @@ internal static class CommandGenerate
         return errors == 0;
     }
 
-    // With --output, the rules of every project go into one file, e.g. one for the whole solution.
     private static async Task<bool> GenerateOneFileAsync(IReadOnlyList<Project> projects, string outputPath, bool force)
     {
         if (!CanWrite(outputPath, force, "all projects"))
@@ -93,7 +91,6 @@ internal static class CommandGenerate
         return true;
     }
 
-    // With a rule file that allows nothing, the analyzer reports every dependency, with its namespaces as properties.
     private static async Task CollectAsync(Project project, DependencyRuleSetBuilder builder)
     {
         Console.WriteLine($"\n{project.Name} ({project.DocumentIds.Count} files)");

@@ -109,8 +109,6 @@ internal sealed class RuleSetValidator
         }
     }
 
-    // Whether the ancestor pattern covers the other one and more: only a wildcard covers other namespaces (`MyApp.*`
-    // covers `MyApp.Api`, `.*` covers everything); an exact `MyApp` covers nothing below it, so it never crosses.
     private static bool IsWildcardParentOf(string ancestor, string descendant)
     {
         if (!ancestor.EndsWith(".*", StringComparison.Ordinal))

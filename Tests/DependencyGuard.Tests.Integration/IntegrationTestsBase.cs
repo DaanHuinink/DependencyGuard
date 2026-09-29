@@ -57,8 +57,6 @@ public abstract class IntegrationTestsBase
         File.WriteAllText(Path.Combine(dir ?? TestDirectory, filename), content);
     }
 
-    // Restores from the analyzer package the fixture packed, into a folder of the test run's own (not the machine's
-    // NuGet cache).
     protected void WriteNuGetConfig(string? dir = null)
     {
         File.WriteAllText(Path.Combine(dir ?? TestDirectory, "NuGet.Config"), $"""
@@ -75,8 +73,6 @@ public abstract class IntegrationTestsBase
             """);
     }
 
-    // The namespaces the tests' sources refer to. The CLI compiles the projects like the build, and a name that does
-    // not resolve is not checked.
     protected void WriteReferencedNamespaces(string? dir = null)
     {
         WriteSource("ReferencedNamespaces.cs", """
@@ -85,7 +81,7 @@ public abstract class IntegrationTestsBase
             """, dir);
     }
 
-    // The CLI is built once by IntegrationSetupFixture; every test starts the built assembly.
+    // The CLI is built once by IntegrationSetupFixture, so every run can skip the build.
     protected static Task<(string Output, int ExitCode)> RunCliAsync(string arguments)
     {
         return IntegrationSetupFixture.RunAsync(

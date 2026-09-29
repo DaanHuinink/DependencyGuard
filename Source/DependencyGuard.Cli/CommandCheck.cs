@@ -41,7 +41,10 @@ internal static class CommandCheck
         {
             (int violations, bool isValid) = await CheckProjectAsync(project, configPaths);
             totalViolations += violations;
-            invalidConfigs += isValid ? 0 : 1;
+            if (!isValid)
+            {
+                invalidConfigs++;
+            }
         }
 
         Console.WriteLine();
@@ -64,7 +67,6 @@ internal static class CommandCheck
         return 0;
     }
 
-    // IsValid is false when a rule file has mistakes or conflicting rules (DG0003, DG0004).
     private static async Task<(int Violations, bool IsValid)> CheckProjectAsync(Project project, IReadOnlyList<string> configPaths)
     {
         IReadOnlyList<AdditionalText> ruleFiles = ProjectsAnalysis.GetRuleFiles(project, configPaths);

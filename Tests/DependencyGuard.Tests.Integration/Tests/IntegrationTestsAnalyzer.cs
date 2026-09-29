@@ -247,7 +247,7 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
     [Test]
     public async Task Build_ShouldReportDG0001_WhenTypeComesFromImplicitUsings()
     {
-        // Arrange: File comes from System.IO through ImplicitUsings, without a using line in the file
+        // Arrange
         WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
         WriteYaml("""
             allowed:
@@ -273,7 +273,7 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
     [Test]
     public async Task Build_ShouldReportDG0001InTheRazorFile_WhenComponentUsesDisallowedNamespace()
     {
-        // Arrange: the component's namespace is the root namespace plus its folder
+        // Arrange
         WriteCsproj("MyProject", sdk: "Microsoft.NET.Sdk.Razor", items: """<FrameworkReference Include="Microsoft.AspNetCore.App" />""");
         WriteYaml("""
             allowed:
@@ -305,7 +305,7 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
     [Test]
     public async Task Build_ShouldUseTheRootNamespace_WhenCodeHasNoNamespace()
     {
-        // Arrange: top-level statements belong to the project's root namespace (the project name by default)
+        // Arrange
         WriteCsproj("MyProject", properties: "<OutputType>Exe</OutputType>");
         WriteYaml("""
             allowed:
@@ -360,7 +360,7 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
     [Test]
     public async Task Build_ShouldReportDG0001AtTheUse_WhenExtensionMemberComesFromAnotherNamespace()
     {
-        // Arrange: a C# 14 extension property, which the analyzer's own Roslyn (4.13) does not know
+        // Arrange
         WriteCsproj("MyProject");
         WriteYaml("""
             allowed:
@@ -389,7 +389,7 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         // Act
         (string output, int exitCode) = await BuildAsync();
 
-        // Assert: at Shout
+        // Assert
         const string expected = "Service.cs(5,44): warning DG0001: No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'";
         Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
         Assert.That(output, Does.Contain(expected), $"Output:\n{output}");

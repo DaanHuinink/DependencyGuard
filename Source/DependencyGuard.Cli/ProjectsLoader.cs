@@ -4,9 +4,6 @@ using Microsoft.CodeAnalysis.MSBuild;
 
 namespace DependencyGuard.Cli;
 
-// Loads the C# projects of a target the way the build sees them: MSBuild evaluates them (their rule files, root
-// namespace, implicit usings, linked files and source generators such as Razor's) and Roslyn's workspace compiles them
-// in memory. The projects stay usable while the loader is not disposed.
 internal sealed class ProjectsLoader : IDisposable
 {
     private readonly MSBuildWorkspace _workspace = MSBuildWorkspace.Create();
@@ -22,8 +19,6 @@ internal sealed class ProjectsLoader : IDisposable
         });
     }
 
-    // Returns the projects, or an error: a target that is not a project, solution or folder with a project, or a
-    // failed restore.
     public async Task<(IReadOnlyList<Project> Projects, string? Error)> LoadAsync(string targetPath, bool restore)
     {
         if (!TryResolveTarget(targetPath, out string? solutionPath, out List<string> projectPaths, out string? error))
@@ -33,7 +28,10 @@ internal sealed class ProjectsLoader : IDisposable
 
         if (restore)
         {
-            foreach (string path in solutionPath is null ? projectPaths : [solutionPath])
+            List<string> restorePaths = solutionPath is null
+                ? projectPaths
+                : [solutionPath];
+            foreach (string path in restorePaths)
             {
                 string? restoreError = await RestoreAsync(path);
                 if (restoreError is not null)
@@ -57,7 +55,6 @@ internal sealed class ProjectsLoader : IDisposable
                 await _workspace.OpenProjectAsync(projectPath);
             }
 
-            // A project that targets several frameworks is loaded once per framework.
             projects.AddRange(_workspace.CurrentSolution.Projects
                 .Where(p => IsSamePath(p.FilePath, projectPath) && p.Language == LanguageNames.CSharp));
         }
@@ -78,7 +75,9 @@ internal sealed class ProjectsLoader : IDisposable
 
         if (Directory.Exists(targetPath))
         {
-            projectPaths = [.. Directory.GetFiles(targetPath, "*.csproj", SearchOption.TopDirectoryOnly)];
+            projectPaths = Directory
+                .GetFiles(targetPath, "*.csproj", SearchOption.TopDirectoryOnly)
+                .ToList();
             if (projectPaths.Count == 0)
             {
                 error = $"No .csproj found in: {targetPath}";
@@ -109,7 +108,6 @@ internal sealed class ProjectsLoader : IDisposable
         return false;
     }
 
-    // MSBuild needs the packages (project.assets.json) to know a project's references.
     private static async Task<string?> RestoreAsync(string path)
     {
         ProcessStartInfo start = new("dotnet")

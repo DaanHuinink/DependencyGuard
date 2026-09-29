@@ -96,7 +96,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
                 to: MyApp.Domain
             """);
 
-        // The project's own config allows the dependency; the --config file adds its own rules to it.
+        // The project's own config allows the dependency. The --config file adds its rules to it.
         string projectDir = Path.Combine(TestDirectory, "project");
         Directory.CreateDirectory(projectDir);
         WriteCsproj("MyProject", projectDir);
@@ -379,7 +379,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     [Test]
     public async Task Tool_ShouldReportTheUseInTheRazorFile_WhenComponentUsesDisallowedNamespace()
     {
-        // Arrange: the CLI compiles the project like the build, source generators (Razor) included
+        // Arrange
         WriteCsproj("MyProject", sdk: "Microsoft.NET.Sdk.Razor", items: """<FrameworkReference Include="Microsoft.AspNetCore.App" />""");
         WriteYaml("""
             allowed:
@@ -410,7 +410,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     [Test]
     public async Task Tool_ShouldReportDG0001_WhenTypeComesFromImplicitUsings()
     {
-        // Arrange: File comes from System.IO through ImplicitUsings, without a using line in the file
+        // Arrange
         WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
         WriteYaml("""
             allowed:
@@ -436,7 +436,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     [Test]
     public async Task Tool_ShouldCheckALinkedFile_WhenProjectCompilesASourceFromElsewhere()
     {
-        // Arrange: shared/Clock.cs is outside the project's folder, compiled in with <Compile Include>
+        // Arrange
         string projectDir = Path.Combine(TestDirectory, "project");
         string sharedDir = Path.Combine(TestDirectory, "shared");
         Directory.CreateDirectory(projectDir);
@@ -464,7 +464,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     [Test]
     public async Task Tool_ShouldUseTheRuleFilesOfTheBuild_WhenMSBuildGivesThemToTheProject()
     {
-        // Arrange: the rule file is not in the project's folder; only MSBuild knows it (DependencyGuardConfig)
+        // Arrange
         WriteNuGetConfig();
         string rules = Path.Combine(TestDirectory, "rules");
         string projectDir = Path.Combine(TestDirectory, "project");

@@ -9,11 +9,8 @@ namespace DependencyGuard.Cli;
 
 internal sealed record ProjectAnalysis(ImmutableArray<Diagnostic> Diagnostics, int CompileErrors);
 
-// Runs DependencyGuard's analyzer on a project's compilation with the given rule files, as the build does.
 internal static class ProjectsAnalysis
 {
-    // The rule files the build gives the project (DependencyGuardConfig, DependencyGuardConfigPath), or else the
-    // dependency-guard.yaml in its folder (a project without the DependencyGuard package); the --config files on top.
     public static IReadOnlyList<AdditionalText> GetRuleFiles(Project project, IReadOnlyList<string> configPaths)
     {
         List<AdditionalText> ruleFiles = project.AnalyzerOptions.AdditionalFiles
@@ -33,7 +30,6 @@ internal static class ProjectsAnalysis
             .ToList();
     }
 
-    // An empty rule file allows nothing, so every dependency is reported: that is what generate collects.
     public static IReadOnlyList<AdditionalText> GetEmptyRuleFile(Project project)
     {
         string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", RoslynAnalyzer.ConfigFileName);
@@ -46,7 +42,6 @@ internal static class ProjectsAnalysis
                                   ?? throw new InvalidOperationException($"{project.Name} has no compilation.");
         int compileErrors = compilation.GetDiagnostics().Count(d => d.Severity == DiagnosticSeverity.Error);
 
-        // The rule files go to the analyzer itself: a --config file may have any name.
         AnalyzerOptions options = new(
             [],
             new OptionsWithRootNamespace(project.AnalyzerOptions.AnalyzerConfigOptionsProvider, project.DefaultNamespace));
@@ -67,8 +62,6 @@ internal static class ProjectsAnalysis
         }
     }
 
-    // The project's analyzer options, with its RootNamespace when MSBuild does not hand it to analyzers itself (the
-    // DependencyGuard package makes it do so; a project without the package does not).
     private sealed class OptionsWithRootNamespace(AnalyzerConfigOptionsProvider inner, string? rootNamespace)
         : AnalyzerConfigOptionsProvider
     {
@@ -96,7 +89,9 @@ internal static class ProjectsAnalysis
                 return true;
             }
 
-            value = key == RootNamespaceKey ? rootNamespace : null;
+            value = key == RootNamespaceKey
+                ? rootNamespace
+                : null;
             return !string.IsNullOrWhiteSpace(value);
         }
     }

@@ -215,7 +215,7 @@ public sealed class IntegrationTestsInspector : IntegrationTestsBase
     [Test]
     public async Task Generate_ShouldWriteWhatTheCompilerSees_WhenTypeComesFromImplicitUsings()
     {
-        // Arrange: File comes from System.IO through ImplicitUsings, without a using line in the file
+        // Arrange
         WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
         WriteSource("Reader.cs", """
             namespace MyApp.Application;
