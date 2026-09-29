@@ -917,7 +917,9 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.GetMessage()).ToArray(), Is.EqualTo(new[] { "No rule allows 'TestProject' to depend on 'MyApp.Infrastructure'." }));
+        Assert.That(
+            diagnostics.Select(d => d.GetMessage()).ToArray(),
+            Is.EqualTo(new[] { "No rule allows 'TestProject' to depend on 'MyApp.Infrastructure'." }));
     }
 
     [Test]
@@ -945,7 +947,9 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([(string.Empty, source)], yaml, properties);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.GetMessage()).ToArray(), Is.EqualTo(new[] { "No rule allows 'MyApp.Application' to depend on 'MyApp.Web'." }));
+        Assert.That(
+            diagnostics.Select(d => d.GetMessage()).ToArray(),
+            Is.EqualTo(new[] { "No rule allows 'MyApp.Application' to depend on 'MyApp.Web'." }));
     }
 
     [Test]
@@ -1126,6 +1130,8 @@ public sealed class TestsAnalyzer
             properties);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.GetMessage()).ToArray(), Is.EqualTo(new[] { "No rule allows 'MyApp.Web' to depend on 'MyApp.Infrastructure'." }));
+        Assert.That(
+            diagnostics.Select(d => d.GetMessage()).ToArray(),
+            Is.EqualTo(new[] { "No rule allows 'MyApp.Web' to depend on 'MyApp.Infrastructure'." }));
     }
 }
