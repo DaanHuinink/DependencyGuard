@@ -247,7 +247,9 @@ Found 1 violation(s).
 | DG0004 | error | A mistake in a rule file, at its line. |
 | DG9999 | error | A bug in DependencyGuard. |
 
-To fail the build on a violation, raise DG0001 in `.editorconfig`: `dotnet_diagnostic.DG0001.severity = error`.
+To fail the build on a violation, add `<WarningsAsErrors>$(WarningsAsErrors);DG0001</WarningsAsErrors>` to the
+project (or a `Directory.Build.props`). A severity in `.editorconfig` also works for `.cs` files, but it does not
+reach the C# that Razor generates, so a violation in a `.razor` file would stay a warning.
 
 ## Demo
 
