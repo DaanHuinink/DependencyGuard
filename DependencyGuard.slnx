@@ -22,7 +22,7 @@
   </Folder>
   <Folder Name="/Tests/">
     <File Path="Tests/Directory.Build.props" />
-    <Project Path="Tests/DependencyGuard.Tests.Analyzer/DependencyGuard.Tests.Analyzer.csproj" />
+    <Project Path="Tests/DependencyGuard.Tests.Roslyn/DependencyGuard.Tests.Roslyn.csproj" />
     <Project Path="Tests/DependencyGuard.Tests.Core/DependencyGuard.Tests.Core.csproj" />
     <Project Path="Tests/DependencyGuard.Tests.Integration/DependencyGuard.Tests.Integration.csproj" />
   </Folder>

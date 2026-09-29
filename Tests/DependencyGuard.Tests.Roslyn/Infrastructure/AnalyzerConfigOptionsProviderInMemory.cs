@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace DependencyGuard.Tests.Analyzer.Infrastructure;
+namespace DependencyGuard.Tests.Roslyn.Infrastructure;
 
 internal sealed class AnalyzerConfigOptionsProviderInMemory(IReadOnlyDictionary<string, string> globalOptions)
     : AnalyzerConfigOptionsProvider

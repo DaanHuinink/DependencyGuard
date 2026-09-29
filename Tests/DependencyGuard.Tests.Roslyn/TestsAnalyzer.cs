@@ -1,11 +1,11 @@
 using DependencyGuard.Roslyn.Interfaces;
 using System.Collections.Immutable;
-using DependencyGuard.Tests.Analyzer.Infrastructure;
+using DependencyGuard.Tests.Roslyn.Infrastructure;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using NUnit.Framework;
 
-namespace DependencyGuard.Tests.Analyzer;
+namespace DependencyGuard.Tests.Roslyn;
 
 // Target namespaces are declared in the test source on purpose: the analyzer skips usings it can't
 // resolve, so a test using an undeclared namespace would pass regardless of the configured rules.

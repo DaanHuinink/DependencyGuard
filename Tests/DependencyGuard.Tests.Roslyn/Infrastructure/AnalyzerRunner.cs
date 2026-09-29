@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace DependencyGuard.Tests.Analyzer.Infrastructure;
+namespace DependencyGuard.Tests.Roslyn.Infrastructure;
 
 internal static class AnalyzerRunner
 {

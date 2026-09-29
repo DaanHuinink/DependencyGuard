@@ -1,7 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DependencyGuard.Tests.Analyzer.Infrastructure;
+namespace DependencyGuard.Tests.Roslyn.Infrastructure;
 
 internal sealed class AdditionalTextInMemory(string path, string text) : AdditionalText
 {
