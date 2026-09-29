@@ -179,7 +179,7 @@ public sealed class TestsDependencyRuleSetParserYaml
     }
 
     [Test]
-    public void Parse_ShouldAcceptEmptySection_WhenSectionHasNoRules()
+    public void Parse_ShouldReportError_WhenSectionHasNoRules()
     {
         // Arrange
         const string yaml = """
@@ -188,10 +188,12 @@ public sealed class TestsDependencyRuleSetParserYaml
             """;
 
         // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
 
         // Assert
-        Assert.That(ruleSet.Rules, Is.Empty);
+        Assert.That(
+            exception!.Errors.Select(e => e.Message),
+            Is.EqualTo(new[] { "'allowed' has no rules.", "'denied' has no rules." }));
     }
 
     [Test]

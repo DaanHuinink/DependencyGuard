@@ -4,8 +4,6 @@ using YamlDotNet.RepresentationModel;
 
 namespace DependencyGuard.Core.Internal.RuleSetYaml;
 
-// Reads a dependency-guard.yaml. Every mistake is reported (RuleSetException), because a rule that silently never
-// matches is dangerous: a misspelled `denied` rule allows what it was meant to deny.
 internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
 {
     private const string AllowedKey = "allowed";
@@ -14,6 +12,38 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
     private const string ToKey = "to";
 
     public DependencyRuleSet Parse(string configurationText, string? sourcePath = null)
+    {
+        YamlStream stream = GetYamlStream(configurationText, sourcePath);
+        if (IsStreamEmpty(stream))
+        {
+            return new([]);
+        }
+
+        YamlMappingNode root = GetRoot(sourcePath, stream);
+        List<DependencyRule> rules = ParseRules(sourcePath, root);
+        return new(rules);
+    }
+
+    private static YamlMappingNode GetRoot(string? sourcePath, YamlStream stream)
+    {
+        if (stream.Documents[0].RootNode is not YamlMappingNode root)
+        {
+            throw new RuleSetException([
+                new(
+                    $"A rule file is a mapping with '{AllowedKey}' and '{DeniedKey}' lists.",
+                    ToLocation(sourcePath, stream.Documents[0].RootNode.Start))
+            ]);
+        }
+
+        return root;
+    }
+
+    private static bool IsStreamEmpty(YamlStream stream)
+    {
+        return stream.Documents.Count == 0 || IsEmpty(stream.Documents[0].RootNode);
+    }
+
+    private static YamlStream GetYamlStream(string configurationText, string? sourcePath)
     {
         YamlStream stream = new();
         try
@@ -25,24 +55,17 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
             throw new RuleSetException([new(exception.Message, ToLocation(sourcePath, exception.Start))]);
         }
 
-        if (stream.Documents.Count == 0 || IsEmpty(stream.Documents[0].RootNode))
-        {
-            return new([]);
-        }
+        return stream;
+    }
 
-        List<RuleSetError> errors = [];
+    private static List<DependencyRule> ParseRules(string? sourcePath, YamlMappingNode root)
+    {
         List<DependencyRule> rules = [];
-        if (stream.Documents[0].RootNode is not YamlMappingNode root)
-        {
-            errors.Add(new(
-                $"A rule file is a mapping with '{AllowedKey}' and '{DeniedKey}' lists.",
-                ToLocation(sourcePath, stream.Documents[0].RootNode.Start)));
-            throw new RuleSetException(errors);
-        }
+        List<RuleSetError> errors = [];
 
         foreach (KeyValuePair<YamlNode, YamlNode> section in root.Children)
         {
-            string key = (section.Key as YamlScalarNode)?.Value ?? string.Empty;
+            string key = GetScalarValue(section.Key);
             DependencyAction? action = key switch
             {
                 AllowedKey => DependencyAction.Allow,
@@ -58,7 +81,9 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
                 continue;
             }
 
-            ParseRuleEntries(section.Value, key, action.Value, sourcePath, rules, errors);
+            RuleSetParseResultYaml result = ParseRuleEntries(section.Value, key, action.Value, sourcePath);
+            rules.AddRange(result.Rules);
+            errors.AddRange(result.Errors);
         }
 
         if (errors.Count > 0)
@@ -66,81 +91,108 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
             throw new RuleSetException(errors);
         }
 
-        return new(rules);
+        return rules;
     }
 
-    private static void ParseRuleEntries(YamlNode section, string key, DependencyAction action, string? sourcePath,
-        List<DependencyRule> rules, List<RuleSetError> errors)
+    private static RuleSetParseResultYaml ParseRuleEntries(
+            YamlNode section,
+            string key,
+            DependencyAction action,
+            string? sourcePath)
     {
-        // `allowed:` with nothing after it is an empty list.
-        if (IsEmpty(section))
+        if (IsEmpty(section) || section is YamlSequenceNode { Children.Count: 0 })
         {
-            return;
+            return new([], [new($"'{key}' has no rules.", ToLocation(sourcePath, section.Start))]);
         }
 
         if (section is not YamlSequenceNode entries)
         {
-            errors.Add(new($"'{key}' is a list of rules, each with a '{FromKey}' and a '{ToKey}'.",
-                ToLocation(sourcePath, section.Start)));
-            return;
+            return new(
+                [],
+                [
+                    new(
+                        $"'{key}' is a list of rules, each with a '{FromKey}' and a '{ToKey}'.",
+                        ToLocation(sourcePath, section.Start))
+                ]);
         }
 
-        foreach (YamlNode item in entries.Children)
-        {
-            if (item is not YamlMappingNode entry)
-            {
-                errors.Add(new($"A rule has a '{FromKey}' and a '{ToKey}'.", ToLocation(sourcePath, item.Start)));
-                continue;
-            }
-
-            int errorCount = errors.Count;
-            foreach (YamlNode entryKey in entry.Children.Keys)
-            {
-                string name = (entryKey as YamlScalarNode)?.Value ?? string.Empty;
-                if (name is not (FromKey or ToKey))
-                {
-                    errors.Add(new($"Unknown key '{name}' in a rule. A rule has a '{FromKey}' and a '{ToKey}'.",
-                        ToLocation(sourcePath, entryKey.Start)));
-                }
-            }
-
-            string? from = GetPattern(entry, FromKey, sourcePath, errors);
-            string? to = GetPattern(entry, ToKey, sourcePath, errors);
-            if (errors.Count == errorCount && from is not null && to is not null)
-            {
-                rules.Add(new(from, to, action, ToLocation(sourcePath, entry.Start)));
-            }
-        }
+        RuleSetParseResultYaml[] results = entries.Children
+            .Select(item => ParseRuleEntry(item, action, sourcePath))
+            .ToArray();
+        return new(
+            results.SelectMany(result => result.Rules).ToArray(),
+            results.SelectMany(result => result.Errors).ToArray());
     }
 
-    private static string? GetPattern(YamlMappingNode entry, string key, string? sourcePath, List<RuleSetError> errors)
+    private static RuleSetParseResultYaml ParseRuleEntry(YamlNode item, DependencyAction action, string? sourcePath)
+    {
+        if (item is not YamlMappingNode entry)
+        {
+            return new([], [new($"A rule has a '{FromKey}' and a '{ToKey}'.", ToLocation(sourcePath, item.Start))]);
+        }
+
+        RuleSetError[] errors = GetUnknownKeyErrors(entry, sourcePath)
+            .Concat(GetPatternErrors(entry, FromKey, sourcePath))
+            .Concat(GetPatternErrors(entry, ToKey, sourcePath))
+            .ToArray();
+        if (errors.Length > 0)
+        {
+            return new([], errors);
+        }
+
+        DependencyRule rule = new(
+            GetPattern(entry, FromKey),
+            GetPattern(entry, ToKey),
+            action,
+            ToLocation(sourcePath, entry.Start));
+        return new([rule], []);
+    }
+
+    private static IEnumerable<RuleSetError> GetUnknownKeyErrors(YamlMappingNode entry, string? sourcePath)
+    {
+        return entry.Children.Keys
+            .Where(key => GetScalarValue(key) is not (FromKey or ToKey))
+            .Select(key => new RuleSetError(
+                $"Unknown key '{GetScalarValue(key)}' in a rule. A rule has a '{FromKey}' and a '{ToKey}'.",
+                ToLocation(sourcePath, key.Start)));
+    }
+
+    private static IEnumerable<RuleSetError> GetPatternErrors(YamlMappingNode entry, string key, string? sourcePath)
     {
         if (!entry.Children.TryGetValue(new YamlScalarNode(key), out YamlNode? node))
         {
-            errors.Add(new($"The rule has no '{key}'.", ToLocation(sourcePath, entry.Start)));
-            return null;
+            return [new($"The rule has no '{key}'.", ToLocation(sourcePath, entry.Start))];
         }
 
-        string pattern = (node as YamlScalarNode)?.Value?.Trim() ?? string.Empty;
+        string pattern = GetScalarValue(node).Trim();
         if (pattern.Length == 0)
         {
-            errors.Add(new($"The rule's '{key}' is empty.", ToLocation(sourcePath, node.Start)));
-            return null;
+            return [new($"The rule's '{key}' is empty.", ToLocation(sourcePath, node.Start))];
         }
 
         if (!IsValidPattern(pattern))
         {
-            errors.Add(new(
-                $"'{pattern}' is not a namespace pattern. Use a namespace ('MyApp.Api'), a namespace with everything " +
-                "below it ('MyApp.Api.*') or every namespace ('.*').",
-                ToLocation(sourcePath, node.Start)));
-            return null;
+            return [
+                new(
+                    $"'{pattern}' is not a namespace pattern. Use a namespace ('MyApp.Api'), a namespace with " +
+                    "everything below it ('MyApp.Api.*') or every namespace ('.*').",
+                    ToLocation(sourcePath, node.Start))
+            ];
         }
 
-        return pattern;
+        return [];
     }
 
-    // `.*`, or a dotted namespace name, optionally followed by `.*`.
+    private static string GetPattern(YamlMappingNode entry, string key)
+    {
+        return GetScalarValue(entry.Children[new YamlScalarNode(key)]).Trim();
+    }
+
+    private static string GetScalarValue(YamlNode node)
+    {
+        return (node as YamlScalarNode)?.Value ?? string.Empty;
+    }
+
     private static bool IsValidPattern(string pattern)
     {
         if (pattern == ".*")
@@ -148,13 +200,17 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
             return true;
         }
 
-        string name = pattern.EndsWith(".*", StringComparison.Ordinal) ? pattern.Substring(0, pattern.Length - 2) : pattern;
+        string name = pattern.EndsWith(".*", StringComparison.Ordinal)
+            ? pattern.Substring(0, pattern.Length - 2)
+            : pattern;
         return name.Length > 0 && name.Split('.').All(IsIdentifier);
     }
 
     private static bool IsIdentifier(string segment)
     {
-        string identifier = segment.StartsWith("@", StringComparison.Ordinal) ? segment.Substring(1) : segment;
+        string identifier = segment.StartsWith("@", StringComparison.Ordinal)
+            ? segment.Substring(1)
+            : segment;
         return identifier.Length > 0
                && (char.IsLetter(identifier[0]) || identifier[0] == '_')
                && identifier.All(c => char.IsLetterOrDigit(c) || c == '_');
@@ -165,7 +221,6 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
         return node is YamlScalarNode { Value: null or "" } scalar && scalar.Style == ScalarStyle.Plain;
     }
 
-    // YamlDotNet counts lines and columns from 1; a SourceLocation from 0.
     private static SourceLocation? ToLocation(string? sourcePath, Mark mark)
     {
         return sourcePath is null
