@@ -14,6 +14,9 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         File.WriteAllText(Path.Combine(TestDirectory, "NuGet.Config"), $"""
             <?xml version="1.0" encoding="utf-8"?>
             <configuration>
+              <config>
+                <add key="globalPackagesFolder" value="{Path.Combine(IntegrationSetupFixture.LocalPackagesDir, "packages")}" />
+              </config>
               <packageSources>
                 <add key="local" value="{IntegrationSetupFixture.LocalPackagesDir}" />
                 <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
@@ -250,6 +253,119 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         // Assert
         Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
         Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldReportDG0001_WhenTypeComesFromImplicitUsings()
+    {
+        // Arrange: File comes from System.IO through ImplicitUsings, without a using line in the file
+        WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: System
+            """);
+        WriteSource("Reader.cs", """
+            namespace MyApp.Application;
+            public class Reader
+            {
+                public string Read(string path) { return File.ReadAllText(path); }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyApp.Application' to depend on 'System.IO'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldReportDG0001InTheRazorFile_WhenComponentUsesDisallowedNamespace()
+    {
+        // Arrange: the component's namespace is the root namespace plus its folder
+        WriteCsproj("MyProject", sdk: "Microsoft.NET.Sdk.Razor", items: """<FrameworkReference Include="Microsoft.AspNetCore.App" />""");
+        WriteYaml("""
+            allowed:
+              - from: .*
+                to: System.*
+              - from: .*
+                to: Microsoft.*
+            """);
+        WriteSource("Clock.cs", """
+            namespace MyApp.Infrastructure;
+            public static class Clock { public static string Now() { return "now"; } }
+            """);
+        Directory.CreateDirectory(Path.Combine(TestDirectory, "Components"));
+        WriteSource(Path.Combine("Components", "Page.razor"), """
+            @using MyApp.Infrastructure
+            <p>@Clock.Now()</p>
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Page.razor(1,"), $"Expected the using in Page.razor. Output:\n{output}");
+        Assert.That(output, Does.Contain("Page.razor(2,"), $"Expected the use in Page.razor. Output:\n{output}");
+        Assert.That(output, Does.Contain("'MyProject.Components' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldUseTheRootNamespace_WhenCodeHasNoNamespace()
+    {
+        // Arrange: top-level statements belong to the project's root namespace (the project name by default)
+        WriteCsproj("MyProject", properties: "<OutputType>Exe</OutputType>");
+        WriteYaml("""
+            allowed:
+              - from: MyProject
+                to: MyApp.Domain
+              - from: MyProject
+                to: System
+            """);
+        WriteSource("Domain.cs", """
+            namespace MyApp.Domain { public class Order { } }
+            namespace MyApp.Infrastructure { public class Repository { } }
+            """);
+        WriteSource("Program.cs", """
+            using MyApp.Domain;
+            using MyApp.Infrastructure;
+
+            System.Console.WriteLine(new Order());
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyProject' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+        Assert.That(output, Does.Not.Contain("to depend on 'MyApp.Domain'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldFailWithDG0004AtTheLine_WhenRuleFileHasATypo()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+        WriteYaml("""
+            allowed:
+              - form: MyApp.Application
+                to: MyApp.Domain
+            """);
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            public class Service { }
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.Not.EqualTo(0), $"Expected build failure. Output:\n{output}");
+        Assert.That(output, Does.Contain("dependency-guard.yaml(2,5): error DG0004: Unknown key 'form'"), $"Output:\n{output}");
     }
 
     private Task<(string Output, int ExitCode)> BuildAsync()
