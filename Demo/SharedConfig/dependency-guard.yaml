@@ -1,4 +1,6 @@
 allowed:
+  - from: .*
+    to: System.*
   - from: Application
     to: Domain
   - from: Infrastructure

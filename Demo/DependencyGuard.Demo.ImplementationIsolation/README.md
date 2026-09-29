@@ -27,4 +27,4 @@ One implementation depending on another. `EmailFallback` in `Internal.Email` cre
 
 ## Enforcement
 
-[`dependency-guard.yaml`](dependency-guard.yaml) allows `Dispatching` and `Internal.*` to use `External`. Nothing allows `Internal.Email` to use `Internal.Sms`, so that `using` is reported as DG0001.
+[`dependency-guard.yaml`](dependency-guard.yaml) allows `Dispatching` and `Internal.*` to use `External`. Nothing allows `Internal.Email` to use `Internal.Sms`, so that `using` is reported as DG0001, and so is the `SmsSender` it is used for.

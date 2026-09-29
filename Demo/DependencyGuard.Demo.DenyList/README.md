@@ -27,4 +27,4 @@ Any use of the banned namespace. `PluginLoader` in `Plugins` creates objects thr
 
 ## Enforcement
 
-[`dependency-guard.yaml`](dependency-guard.yaml) allows every namespace to use every other namespace, then denies `System.Reflection.*` to all of them. The deny rule has the more specific `to`, so it wins. The `using System.Reflection;` in `PluginLoader` is reported as DG0001, while `Orders` can still use `Customers` and `System.Text`.
+[`dependency-guard.yaml`](dependency-guard.yaml) allows every namespace to use every other namespace, then denies `System.Reflection.*` to all of them. The deny rule has the more specific `to`, so it wins. The `using System.Reflection;` in `PluginLoader` is reported as DG0001, and so is the reflection type it uses, while `Orders` can still use `Customers` and `System.Text`.
