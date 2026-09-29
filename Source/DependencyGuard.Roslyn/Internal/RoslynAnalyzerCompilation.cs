@@ -284,12 +284,12 @@ internal sealed class RoslynAnalyzerCompilation
         }
 
         Location[] ruleLocations = result.RuleLocation is not null
-            ? [RoslynAnalyzer.ToLocation(result.RuleLocation, _configFiles)]
+            ? [RoslynAnalyzerRuleFiles.ToLocation(result.RuleLocation, _configFiles)]
             : [];
 
         ImmutableDictionary<string, string?> properties = ImmutableDictionary<string, string?>.Empty
-            .Add(RoslynAnalyzer.SourceNamespaceProperty, sourceNamespace)
-            .Add(RoslynAnalyzer.TargetNamespaceProperty, targetNamespace);
+            .Add(RoslynAnalyzerContract.SourceNamespaceProperty, sourceNamespace)
+            .Add(RoslynAnalyzerContract.TargetNamespaceProperty, targetNamespace);
 
         report(Diagnostic.Create(RoslynAnalyzerDiagnostics.WarningDisallowedDependency, location, ruleLocations, properties, result.Reason));
     }

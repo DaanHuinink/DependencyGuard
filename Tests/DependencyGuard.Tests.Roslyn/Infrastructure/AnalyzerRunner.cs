@@ -1,3 +1,4 @@
+using DependencyGuard.Roslyn.Composition;
 using System.Collections.Immutable;
 using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
@@ -43,7 +44,7 @@ internal static class AnalyzerRunner
     {
         IEnumerable<(string path, string text)> additionalFiles = yamlConfig is null
             ? []
-            : [(RoslynAnalyzer.ConfigFileName, yamlConfig)];
+            : [(RoslynAnalyzerContract.ConfigFileName, yamlConfig)];
 
         return GetDiagnosticsAsync(sources, additionalFiles, buildProperties ?? new Dictionary<string, string>());
     }

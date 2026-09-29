@@ -1,3 +1,4 @@
+using DependencyGuard.Roslyn.Composition;
 using DependencyGuard.Roslyn.Interfaces;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
@@ -14,10 +15,10 @@ internal static class ProjectsAnalysis
     public static IReadOnlyList<AdditionalText> GetRuleFiles(Project project, IReadOnlyList<string> configPaths)
     {
         List<AdditionalText> ruleFiles = project.AnalyzerOptions.AdditionalFiles
-            .Where(f => string.Equals(Path.GetFileName(f.Path), RoslynAnalyzer.ConfigFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(f => string.Equals(Path.GetFileName(f.Path), RoslynAnalyzerContract.ConfigFileName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        string projectFile = Path.Combine(Path.GetDirectoryName(project.FilePath)!, RoslynAnalyzer.ConfigFileName);
+        string projectFile = Path.Combine(Path.GetDirectoryName(project.FilePath)!, RoslynAnalyzerContract.ConfigFileName);
         if (ruleFiles.Count == 0 && File.Exists(projectFile))
         {
             ruleFiles.Add(new AdditionalTextFile(projectFile));
@@ -32,7 +33,7 @@ internal static class ProjectsAnalysis
 
     public static IReadOnlyList<AdditionalText> GetEmptyRuleFile(Project project)
     {
-        string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", RoslynAnalyzer.ConfigFileName);
+        string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", RoslynAnalyzerContract.ConfigFileName);
         return [new AdditionalTextFile(path, text: string.Empty)];
     }
 

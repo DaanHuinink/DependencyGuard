@@ -38,7 +38,7 @@ namespace MyApp.Domain;
 1. Add the package:
 
    ```xml
-   <PackageReference Include="DependencyGuard.Analyzer" Version="0.2.0-beta.4" PrivateAssets="all" />
+   <PackageReference Include="DependencyGuard.Analyzer" Version="0.2.0-beta.5" PrivateAssets="all" />
    ```
 
 2. Add a `dependency-guard.yaml` to the project directory. It is picked up automatically.

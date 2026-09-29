@@ -8,7 +8,7 @@ internal static class RoslynAnalyzerDiagnostics
     public static readonly DiagnosticDescriptor WarningConfigurationMissing = new(
         id: "DG0000",
         title: "DependencyGuard configuration not found",
-        messageFormat: $"No '{RoslynAnalyzer.ConfigFileName}' additional file found. Add it to AdditionalFiles in your project file.",
+        messageFormat: $"No '{RoslynAnalyzerContract.ConfigFileName}' additional file found. Add it to AdditionalFiles in your project file.",
         category: "Architecture",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,

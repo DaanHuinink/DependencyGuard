@@ -1,3 +1,4 @@
+using DependencyGuard.Core.Composition;
 using DependencyGuard.Core.Interfaces;
 using NUnit.Framework;
 

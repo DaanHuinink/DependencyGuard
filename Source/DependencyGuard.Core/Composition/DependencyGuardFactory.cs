@@ -1,8 +1,9 @@
+using DependencyGuard.Core.Interfaces;
 using DependencyGuard.Core.Internal.Analyzer;
 using DependencyGuard.Core.Internal.RuleSetYaml;
 using DependencyGuard.Core.Internal.Validation;
 
-namespace DependencyGuard.Core.Interfaces;
+namespace DependencyGuard.Core.Composition;
 
 public static class DependencyGuardFactory
 {
