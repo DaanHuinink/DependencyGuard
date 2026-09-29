@@ -1,11 +1,15 @@
 <Solution>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
+    <File Path="CHANGELOG.md" />
     <File Path=".gitignore" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
     <File Path="LICENSE" />
     <File Path="README.md" />
+  </Folder>
+  <Folder Name="/Docs/">
+    <File Path="Docs/Bugs-0.1.md" />
   </Folder>
   <Folder Name="/Scripts/">
     <File Path="Scripts/BuildTestPackRunDemo.cs" />

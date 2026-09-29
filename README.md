@@ -6,7 +6,9 @@ Namespace-level architecture rules for C#.
 
 - Dependency rules between namespaces, in a simple YAML file
 - **Nothing is allowed by default:** every dependency needs a rule
-- Violations show up as warnings in the IDE and the build, at the offending line
+- Violations show up as warnings in the IDE and the build, at the offending line, in `.razor` files too
+- Every name is checked, however it came into scope: a using, an implicit or global using, an alias, the enclosing
+  namespace
 - `allowed` and `denied` rules with wildcards
 - A config per project, one for the whole solution, or both
 - CLI tool for CI, with `generate` to create a starting config from existing code
@@ -38,7 +40,7 @@ namespace MyApp.Domain;
 1. Add the package:
 
    ```xml
-   <PackageReference Include="DependencyGuard.Analyzer" Version="0.1.0" PrivateAssets="all" />
+   <PackageReference Include="DependencyGuard.Analyzer" Version="0.2.0-beta.1" PrivateAssets="all" />
    ```
 
 2. Add a `dependency-guard.yaml` to the project directory. It is picked up automatically.
@@ -50,6 +52,9 @@ namespace MyApp.Domain;
 - `from`: the namespace that has the dependency. `to`: the namespace it depends on.
 - An `allowed` or `denied` rule decides. The most specific `to` wins, then the most specific `from`.
 - Nothing matched: denied.
+- A mistake in the file is an error (DG0004) at its line: an unknown key (`allow:`, `form:`), a missing or empty
+  `from` or `to`, or a pattern that is not one of the three below (`MyApp.*.Api`, `MyApp*`). Nothing is checked
+  until the file is right: a misspelled `denied` rule would otherwise allow what it was meant to deny.
 
 ### Patterns
 
@@ -86,10 +91,21 @@ denied:
 
 ### What is checked
 
-- `using` directives
-- Fully-qualified type references
-- Inferred types of `var`
-- **Not** checked: global, static and alias usings. So `ImplicitUsings` needs no rules.
+- **Every name that refers to a type in another namespace**, however the name came into scope: a `using`, a global
+  or implicit using (`ImplicitUsings`, `<Using>` items), an alias, a static using, an extension method, a fully
+  qualified name, or the enclosing namespace (a child namespace sees its parent's types without a using).
+- `var`: the type the compiler infers, and the types in it (`List<Order>`: `System.Collections.Generic` and
+  `Order`'s namespace).
+- `using Namespace;` directives, where they are written. A using above all namespaces counts for every namespace in
+  the file.
+- **Razor components**: what is written in `.razor` files (the C# that Razor generates is checked where a `#line`
+  directive maps it back to the `.razor` file). A using in `_Imports.razor` is reported once, not once per component.
+- **Code without a namespace** (top-level statements, a class in the global namespace) belongs to the project's
+  `RootNamespace`, so a rule can say `from: MyCompany.MyApp`.
+- **Not** checked: keywords (`string`, `int`), types that are never named (lambda parameters, a target-typed
+  `new()`), and generated code that no `#line` maps to a file.
+- `ImplicitUsings` and `<Using>` items bring in namespaces without a using line, so what you use from them needs
+  rules too, usually `from: .*` `to: System.*`.
 
 ### Multiple config files
 
@@ -104,7 +120,8 @@ denied:
 - All files are merged into one rule set. Conflicts between files are DG0003.
 - Every file must be named `dependency-guard.yaml`.
 - To share one file instead of a file per project, set `DependencyGuardConfigPath` ([example](Demo/SharedConfig/README.md)).
-- The CLI ignores these MSBuild settings.
+- The CLI does not read these MSBuild settings: give it the solution-wide file with `--config`; it is added to each
+  project's own file, as in the build.
 
 ## Architectural patterns
 
@@ -182,7 +199,10 @@ dependency-guard check MySolution.slnx      # report violations
 ```
 
 - Checks projects without building them. Handy in CI.
-- Syntax only: it skips `var` inference and reads `Outer.Inner` as namespace `Outer`.
+- Syntax only: it checks `using` directives and fully qualified names in the `.cs` files of a project's folder. It
+  does not see what the analyzer sees through the compiler: names from global, implicit or static usings, `var`,
+  `.razor` files and files linked from elsewhere. It reads `Outer.Inner` as namespace `Outer`.
+- `--help`, `--version`.
 
 ### generate
 
@@ -192,20 +212,22 @@ dependency-guard generate [--output <path>] [--force] [<target>]
 
 - Writes a `dependency-guard.yaml` per project that allows every dependency it has today.
 - Then remove the rules for the dependencies you don't want.
-- `--output`, `-o`: write to this path (single project)
+- `--output`, `-o`: write one file with the rules of every project, e.g. for the whole solution
 - `--force`: overwrite an existing file
 - Exit codes: `0` written, `2` failed or usage error
 
 ### check
 
 ```
-dependency-guard [check] [--config <path>] [<target>]
+dependency-guard [check] [--config <path>]... [<target>]
 ```
 
 - `check` is the default, so `dependency-guard <target>` works too.
 - `<target>`: a `.csproj`, `.sln` or `.slnx` file, or a directory. Default: the current directory.
-- `--config`, `-c`: use this config for every project.
-- Projects without a config are skipped.
+- `--config`, `-c`: a config for every project, merged with the project's own `dependency-guard.yaml`. May be
+  repeated.
+- Projects without any config are skipped.
+- An unknown option is a usage error.
 - Exit codes: `0` no violations, `1` violations or an invalid config, `2` usage error
 
 ```
@@ -214,6 +236,18 @@ MyApp.Application (14 files)
 
 Found 1 violation(s).
 ```
+
+## Diagnostics
+
+| ID | Severity | Meaning |
+|----|----------|---------|
+| DG0000 | warning | The project has no `dependency-guard.yaml`. |
+| DG0001 | warning | A dependency no rule allows, or one a `denied` rule denies. |
+| DG0003 | error | Conflicting rules: the same pair allowed and denied, or rules whose order of specificity is ambiguous. |
+| DG0004 | error | A mistake in a rule file, at its line. |
+| DG9999 | error | A bug in DependencyGuard. |
+
+To fail the build on a violation, raise DG0001 in `.editorconfig`: `dotnet_diagnostic.DG0001.severity = error`.
 
 ## Demo
 
