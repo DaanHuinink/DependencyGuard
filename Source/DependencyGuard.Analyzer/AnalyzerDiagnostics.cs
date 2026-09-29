@@ -31,9 +31,9 @@ internal static class AnalyzerDiagnostics
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd]);
 
-    public static readonly DiagnosticDescriptor ErrorFailedToParseYaml = new(
+    public static readonly DiagnosticDescriptor ErrorInvalidRuleFile = new(
         id: "DG0004",
-        title: "Failed to parse YAML",
+        title: "Invalid rule file",
         messageFormat: "{0}",
         category: "Architecture",
         defaultSeverity: DiagnosticSeverity.Error,
