@@ -400,9 +400,10 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         // Act
         (string output, int exitCode) = await BuildAsync();
 
-        // Assert
+        // Assert: at Shout
+        const string expected = "Service.cs(5,44): warning DG0001: No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'";
         Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
-        Assert.That(output, Does.Contain("Service.cs(5,44): warning DG0001: No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+        Assert.That(output, Does.Contain(expected), $"Output:\n{output}");
     }
 
     private Task<(string Output, int ExitCode)> BuildAsync()
