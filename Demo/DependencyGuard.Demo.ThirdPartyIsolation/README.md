@@ -27,4 +27,4 @@ Code outside the wrapper calling the API directly. `ReportService` in `Services`
 
 ## Enforcement
 
-[`dependency-guard.yaml`](dependency-guard.yaml) denies `System.IO.*` to every namespace, then allows it again for `FileOperations`, because the more specific rule wins. Every namespace may use `Abstractions`. The `using System.IO;` in `ReportService` is reported as DG0001, and so is its call to `File.WriteAllText`: `System.IO` is also an implicit using, so deleting the using line would not hide the dependency.
+[`dependency-guard.yaml`](dependency-guard.yaml) denies `System.IO.*` to every namespace, then allows it again for `FileOperations`, because the more specific rule wins. Every namespace may use `Abstractions`. The `using System.IO;` in `ReportService` is reported as DG0001.

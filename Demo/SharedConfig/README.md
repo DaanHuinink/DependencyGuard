@@ -27,4 +27,4 @@ The application layer bypassing the domain: in both services, the application se
 
 ## Enforcement
 
-`Directory.Build.props` in this folder points `DependencyGuardConfigPath` at the shared [`dependency-guard.yaml`](dependency-guard.yaml), so both projects load the same rules. Both services use the same namespace names, so the same rules cover them: `Application` and `Infrastructure` may use `Domain`, and every namespace may use `System.*` (the repositories use `List` and LINQ, which come in through the implicit usings). `Application` using `Infrastructure` is reported as DG0001 in each project.
+`Directory.Build.props` in this folder points `DependencyGuardConfigPath` at the shared [`dependency-guard.yaml`](dependency-guard.yaml), so both projects load the same rules. Both services use the same namespace names, so three rules cover them: every namespace may use `System.*`, and `Application` and `Infrastructure` may use `Domain`. `Application` using `Infrastructure` is reported as DG0001 in each project.

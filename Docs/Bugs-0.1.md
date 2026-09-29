@@ -1,4 +1,4 @@
-# Bugs in 0.1, and what 0.2.0-beta.3 does about them
+# Bugs in 0.1, and what 0.2.0-beta.4 does about them
 
 Found on 2026-09-28 and 29 while adding DependencyGuard to Quiz Night (a .NET 10 solution with Blazor components,
 `ImplicitUsings`, top-level statements and about 8,000 cross-namespace references), and while fixing what was found.
@@ -63,7 +63,7 @@ checks live in `AnalyzerCompilation`.
 
 ## 2. Razor components are never checked
 
-**What happens.** Nothing in a `.razor` file was checked. Quiz Night's web library has 47 components; its
+**What happens.** Nothing in a `.razor` file was checked. Quiz Night's web library has 47 components. Its
 `_Imports.razor` gives every one of them `@using QuizNight.Web.Internal.Hosting`, which the architecture forbids,
 without a warning.
 
@@ -72,7 +72,7 @@ generated C#, and generated code was skipped entirely.
 
 **Fix.** Generated code is analyzed, but a diagnostic is only reported where a `#line` directive maps the code back to a
 file someone wrote (`Location.GetMappedLineSpan().HasMappedPath`, on a visible line). That is exactly what Razor does for
-the code in a `.razor` file; the scaffolding it adds, and whatever other generators write, stays unchecked. The warning
+the code in a `.razor` file. The scaffolding it adds, and whatever other generators write, stays unchecked. The warning
 shows up in the `.razor` file, at the right line. Razor copies the usings of `_Imports.razor` into every component: those
 lines are reported once per namespace, not once per component (47 identical warnings before).
 
@@ -95,7 +95,7 @@ In Quiz Night 65 of the first 107 warnings were these.
 **Cause.** `AnalyzeVariableDeclarator` decided whether a declaration was inferred with
 `declarator.Syntax switch { VariableDeclaratorSyntax ... => IsVar, ForEachStatementSyntax f => f.Type.IsVar, _ => true }`.
 Roslyn's declarator syntax for a foreach variable is its *type* (`string`), not the statement, and for a catch variable a
-`CatchDeclarationSyntax`; both fell through to `_ => true`.
+`CatchDeclarationSyntax`. Both fell through to `_ => true`.
 
 **Fix.** The declarator check is gone. `var` is now checked where it is written: the `var` keyword resolves to the
 inferred type, which is checked with the types in it (`List<Order>`: `System.Collections.Generic` and `Order`). That also
@@ -111,7 +111,7 @@ covers `out var` and `foreach (var ...)`.
 undocumented), while their fully qualified names were not checked at all. The CLI skipped these files.
 
 **Fix.** Code without a namespace belongs to the project's `RootNamespace` (the package makes it visible to the analyzer
-with `CompilerVisibleProperty`), or else to the assembly name; the CLI reads `<RootNamespace>` from the project file, or
+with `CompilerVisibleProperty`), or else to the assembly name. The CLI reads `<RootNamespace>` from the project file, or
 uses the project file's name. A type in the global namespace is attributed the same way when it is the target. A rule
 can now say `from: MyCompany.MyApp`.
 
@@ -135,7 +135,7 @@ namespace MyApp
 
 **Cause.** The source namespace was the syntax of the nearest namespace declaration (`ns.Name.ToString()`).
 
-**Fix.** The analyzer takes the namespace from the semantic model (`GetDeclaredSymbol`, `ContainingSymbol`); the CLI
+**Fix.** The analyzer takes the namespace from the semantic model (`GetDeclaredSymbol`, `ContainingSymbol`). The CLI
 joins the names of all enclosing declarations.
 
 **Tests.** `TestsAnalyzer.Analyzer_ShouldReportTheFullNamespace_WhenNamespaceBlocksAreNested`,
@@ -167,11 +167,11 @@ denied:
     to: System.Net.*
 ```
 
-A mistake in an `allowed` rule shows up as DG0001s that are hard to explain; in a `denied` rule it silently allows what
+A mistake in an `allowed` rule shows up as DG0001s that are hard to explain. In a `denied` rule it silently allows what
 the rule was meant to deny.
 
 **Fix.** The parser reports every mistake with its location (`RuleSetException`, DG0004 in the build): an unknown key
-(`allow`, `form`), a missing or empty `from` or `to`, a rule that is not a mapping, and a pattern that is not `.*`, a
+(`allow`, `form`), a section without rules, a missing or empty `from` or `to`, a rule that is not a mapping, and a pattern that is not `.*`, a
 namespace, or a namespace followed by `.*`.
 
 **Tests.** `TestsDependencyRuleSetParserYaml`: `Parse_ShouldReportError_WhenSectionNameIsMisspelled`,
@@ -184,7 +184,7 @@ and more. `TestsAnalyzer.Analyzer_ShouldReportDG0004AtTheMistakeAndNothingElse_W
 
 **What happens.** A DG0003 (conflicting rules) pointed at the line below the rule.
 
-**Cause.** YamlDotNet counts lines and columns from 1; `SourceLocation` is documented, and used, as 0-based.
+**Cause.** YamlDotNet counts lines and columns from 1. `SourceLocation` is documented, and used, as 0-based.
 
 **Fix.** The parser converts.
 
@@ -194,10 +194,10 @@ and more. `TestsAnalyzer.Analyzer_ShouldReportDG0004AtTheMistakeAndNothingElse_W
 ## 9. A broken rule file gives DG0004 without a location, plus DG0000
 
 **What happens.** A YAML syntax error gave a DG0004 whose message was the exception's `ToString()`, without a location.
-When it was the only rule file there was also a DG0000 ("configuration not found"); when there were more, the others
+When it was the only rule file there was also a DG0000 ("configuration not found"). When there were more, the others
 were used on their own, which gave DG0001s that made no sense.
 
-**Fix.** One DG0004 per mistake, at its line; no DG0000; nothing is checked until the files are right.
+**Fix.** One DG0004 per mistake, at its line. No DG0000. Nothing is checked until the files are right.
 
 **Tests.** `TestsAnalyzer.Analyzer_ShouldReportDG0004AtTheMistakeAndNothingElse_WhenRuleFileIsInvalid`,
 `TestsDependencyRuleSetParserYaml.Parse_ShouldReportErrorWithLocation_WhenYamlIsMalformed`.
@@ -218,7 +218,7 @@ denied:
 For `MyApp` → `System.IO` the allow wins on its more specific target, although the deny names `MyApp`. The same rules
 with `from: Root.*` instead of `.*` were reported.
 
-**Cause.** `RuleSetValidator.PatternBaseIsStrictPrefix` tested `descendant.StartsWith(ancestor + ".")`; the base of `.*`
+**Cause.** `RuleSetValidator.PatternBaseIsStrictPrefix` tested `descendant.StartsWith(ancestor + ".")`. The base of `.*`
 is empty, and no namespace starts with `.`.
 
 **Fix.** An empty base is the parent of every other pattern. The usual carve-out (`allowed: .* → System.*`,
@@ -231,7 +231,7 @@ is empty, and no namespace starts with `.`.
 
 **What happens.** `exposedTo` was documented as "Limits who may use a namespace. Everyone else is denied.", but it was
 only consulted when no `allowed` or `denied` rule matched. Next to the common `allowed: .* → System.*`, an
-`exposedTo: System.IO.Compression → [MyApp.Storage]` limited nothing; since nothing is allowed by default, it could only
+`exposedTo: System.IO.Compression → [MyApp.Storage]` limited nothing. Since nothing is allowed by default, it could only
 ever allow.
 
 **Status.** Not fixed: `exposedTo` was removed on the owner's request (first commit of this branch). A limit is written as
@@ -242,10 +242,10 @@ example, that is `denied: .* → System.IO.Compression.*` and `allowed: MyApp.St
 
 ## 12. CLI: `--help` is taken as the target, and so is any unknown option
 
-**What happens.** `dependency-guard --help` printed `File not found: ...\--help`; a typo such as `--confg` became the
+**What happens.** `dependency-guard --help` printed `File not found: ...\--help`. A typo such as `--confg` became the
 target as well.
 
-**Fix.** `--help`, `-h` and `--version`; an unknown option or a second target is a usage error (exit code 2).
+**Fix.** `--help`, `-h` and `--version`. An unknown option or a second target is a usage error (exit code 2).
 
 **Tests.** `IntegrationTestsTool`: `Tool_ShouldShowUsageAndExitWithCode0_WhenHelpIsAsked`, `Tool_ShouldShowTheVersion_WhenVersionIsAsked`,
 `Tool_ShouldExitWithCode2_WhenOptionIsUnknown`.
@@ -253,7 +253,7 @@ target as well.
 ## 13. CLI: `generate --output` fails for more than one project
 
 **What happens.** `generate --output rules.yaml MySolution.slnx` wrote the first project's rules and failed on the
-second ("already exists"); with `--force` each project overwrote the last. There was no way to generate the
+second ("already exists"). With `--force` each project overwrote the last. There was no way to generate the
 solution-wide file the README recommends.
 
 **Fix.** With `--output`, the rules of all projects go into that one file.
@@ -275,7 +275,7 @@ and could disagree with the build.
 
 **What happens.** On Quiz Night, `generate` and the analyzer disagreed on 107 references. The CLI reads the `.cs` files in
 a project's folder and only their syntax: it misses linked files (`<Compile Include="..\shared\*.cs" />`), `.razor`
-files, fully qualified names in expressions (`System.Text.Encoding.UTF8`), and everything bug 1 is about; it includes
+files, fully qualified names in expressions (`System.Text.Encoding.UTF8`), and everything bug 1 is about. It includes
 files the project excludes.
 
 **Fix.** The CLI no longer reads syntax itself. It restores the projects, loads them with MSBuild through Roslyn's
@@ -287,13 +287,13 @@ SDK, and a whole solution takes seconds (Quiz Night, 16 projects: about 15 s).
 
 **Tests.** `IntegrationTestsTool`: `Tool_ShouldReportTheUseInTheRazorFile_WhenComponentUsesDisallowedNamespace`,
 `Tool_ShouldReportDG0001_WhenTypeComesFromImplicitUsings`, `Tool_ShouldCheckALinkedFile_WhenProjectCompilesASourceFromElsewhere`,
-`Tool_ShouldUseTheRuleFilesOfTheBuild_WhenMSBuildGivesThemToTheProject`;
+`Tool_ShouldUseTheRuleFilesOfTheBuild_WhenMSBuildGivesThemToTheProject`.
 `IntegrationTestsInspector.Generate_ShouldWriteWhatTheCompilerSees_WhenTypeComesFromImplicitUsings`.
 
 ## 16. Every test run leaves a package in the NuGet cache
 
 **What happens.** The integration tests pack the analyzer as `0.1.0-int<guid>` and build projects that restore it into
-the machine's global package folder; every run added a version (58 on the author's machine). The demo does the same
+the machine's global package folder. Every run added a version (58 on the author's machine). The demo does the same
 with `0.1.0-dev.<time>`.
 
 **Fix.** The test projects and the demo solution restore into a folder of their own (`globalPackagesFolder` in their
@@ -317,7 +317,7 @@ hand-written deny failed with DG0003.
 
 **Cause.** `RuleSetValidator` checked whether one pattern's base starts with the other's, wildcard or not. That dates from
 when a bare pattern still matched its children (a comment in the analyzer tests says `to: System` "now" matches only
-`System`); two conflict tests still asserted it for exact rules.
+`System`). Two conflict tests still asserted it for exact rules.
 
 **Fix.** Only a wildcard covers other namespaces: `MyApp.*` is the parent of `MyApp.Api`, `.*` of everything, an exact
 `MyApp` of nothing. The two tests now use rules that really cross.
