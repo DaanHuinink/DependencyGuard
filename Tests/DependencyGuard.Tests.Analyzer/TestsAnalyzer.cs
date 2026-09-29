@@ -433,9 +433,9 @@ public sealed class TestsAnalyzer
         const string yaml = """
             allowed:
               - from: MyApp.Application
-                to: MyApp.Infrastructure
+                to: MyApp.Infrastructure.*
             denied:
-              - from: MyApp
+              - from: MyApp.*
                 to: MyApp.Infrastructure.Database
             """;
 
@@ -461,9 +461,9 @@ public sealed class TestsAnalyzer
         const string yaml = """
             denied:
               - from: MyApp.Application
-                to: MyApp.Infrastructure
+                to: MyApp.Infrastructure.*
             allowed:
-              - from: MyApp
+              - from: MyApp.*
                 to: MyApp.Infrastructure.PublicApi
             """;
 

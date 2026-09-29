@@ -88,8 +88,8 @@ public sealed class TestsConflictDetection
         // silently overriding the allow that was written for the narrower source.
         DependencyRuleSet ruleSet = new(
         [
-            new("MyApp.Application", "MyApp.Infrastructure", DependencyAction.Allow),
-            new("MyApp", "MyApp.Infrastructure.Database", DependencyAction.Deny)
+            new("MyApp.Application", "MyApp.Infrastructure.*", DependencyAction.Allow),
+            new("MyApp.*", "MyApp.Infrastructure.Database", DependencyAction.Deny)
         ]);
 
         // Act
@@ -111,8 +111,8 @@ public sealed class TestsConflictDetection
         // silently overriding the deny that was written for the narrower source.
         DependencyRuleSet ruleSet = new(
         [
-            new("MyApp.Application", "MyApp.Infrastructure", DependencyAction.Deny),
-            new("MyApp", "MyApp.Infrastructure.PublicApi", DependencyAction.Allow)
+            new("MyApp.Application", "MyApp.Infrastructure.*", DependencyAction.Deny),
+            new("MyApp.*", "MyApp.Infrastructure.PublicApi", DependencyAction.Allow)
         ]);
 
         // Act
@@ -266,6 +266,26 @@ public sealed class TestsConflictDetection
         [
             new(".*", "System.*", DependencyAction.Allow),
             new("MyApp.Core.*", "System.IO.*", DependencyAction.Deny)
+        ]);
+
+        // Act
+        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
+
+        // Assert
+        Assert.That(conflicts, Is.Empty);
+    }
+
+    [TestCase("Services", "System", ".*", "System.IO.*")]
+    [TestCase("MyApp.Application", "MyApp.Infrastructure", "MyApp", "MyApp.Infrastructure.Database")]
+    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExactPatternsCannotMeet(
+        string allowFrom, string allowTo, string denyFrom, string denyTo)
+    {
+        // Arrange: an exact pattern covers nothing below it, so no dependency matches both rules (generate writes exact
+        // rules like the first, which then meet the deny of a hand-written file)
+        DependencyRuleSet ruleSet = new(
+        [
+            new(allowFrom, allowTo, DependencyAction.Allow),
+            new(denyFrom, denyTo, DependencyAction.Deny)
         ]);
 
         // Act

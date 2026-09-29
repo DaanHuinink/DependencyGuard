@@ -44,8 +44,8 @@ internal sealed class RuleSetValidator
                 //         deny TO is more specific (child of allow TO).
                 //         → deny wins for (allow.FROM → deny.TO) even though allow explicitly
                 //           targets the narrower source namespace.
-                if (PatternBaseIsStrictPrefix(deny.FromNamespace, allow.FromNamespace) &&
-                    PatternBaseIsStrictPrefix(allow.ToNamespace, deny.ToNamespace))
+                if (IsWildcardParentOf(deny.FromNamespace, allow.FromNamespace) &&
+                    IsWildcardParentOf(allow.ToNamespace, deny.ToNamespace))
                 {
                     conflicts.Add(new(
                         $"Allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}') is overridden by " +
@@ -60,8 +60,8 @@ internal sealed class RuleSetValidator
                 //         allow TO is more specific (child of deny TO).
                 //         → allow wins for (deny.FROM → allow.TO) even though deny explicitly
                 //           targets the narrower source namespace.
-                if (PatternBaseIsStrictPrefix(allow.FromNamespace, deny.FromNamespace) &&
-                    PatternBaseIsStrictPrefix(deny.ToNamespace, allow.ToNamespace))
+                if (IsWildcardParentOf(allow.FromNamespace, deny.FromNamespace) &&
+                    IsWildcardParentOf(deny.ToNamespace, allow.ToNamespace))
                 {
                     conflicts.Add(new(
                         $"Deny rule ('from: {deny.FromNamespace}, to: {deny.ToNamespace}') is overridden by " +
@@ -109,10 +109,15 @@ internal sealed class RuleSetValidator
         }
     }
 
-    // Compares pattern bases (stripping `.*` suffix) so wildcard patterns are treated correctly.
-    // `.*` has an empty base: it is the parent of every other pattern.
-    private static bool PatternBaseIsStrictPrefix(string ancestor, string descendant)
+    // Whether the ancestor pattern covers the other one and more: only a wildcard covers other namespaces (`MyApp.*`
+    // covers `MyApp.Api`, `.*` covers everything); an exact `MyApp` covers nothing below it, so it never crosses.
+    private static bool IsWildcardParentOf(string ancestor, string descendant)
     {
+        if (!ancestor.EndsWith(".*", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         string a = GetPatternBase(ancestor);
         string d = GetPatternBase(descendant);
         return a.Length == 0
