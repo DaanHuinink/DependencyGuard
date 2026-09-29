@@ -11,6 +11,7 @@ public sealed class IntegrationSetupFixture
 
     internal static string LocalPackagesDir { get; private set; } = null!;
     internal static string ToolProjectPath { get; private set; } = null!;
+    internal static string ToolAssemblyPath { get; private set; } = null!;
     internal static string AnalyzerPackageVersion { get; private set; } = null!;
 
     [OneTimeSetUp]
@@ -32,10 +33,12 @@ public sealed class IntegrationSetupFixture
 
         Assert.That(packExitCode, Is.EqualTo(0), $"Pack failed:\n{packOutput}");
 
-        // Build the CLI once so the tests can use `dotnet run --no-build`.
-        (string buildOutput, int buildExitCode) = await RunAsync("dotnet", $"build \"{ToolProjectPath}\"");
+        // Build the CLI once; the tests start the built assembly.
+        (string buildOutput, int buildExitCode) = await RunAsync("dotnet", $"build \"{ToolProjectPath}\" -c Debug");
 
         Assert.That(buildExitCode, Is.EqualTo(0), $"CLI build failed:\n{buildOutput}");
+        ToolAssemblyPath = Path.Combine(solutionDir, "Source", "DependencyGuard.Cli", "bin", "Debug", "net10.0", "DependencyGuard.Cli.dll");
+        Assert.That(File.Exists(ToolAssemblyPath), Is.True, ToolAssemblyPath);
     }
 
     [OneTimeTearDown]

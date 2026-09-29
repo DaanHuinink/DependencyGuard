@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using DependencyGuard.Core.Interfaces;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -288,6 +289,11 @@ internal sealed class AnalyzerCompilation(
             ? [Analyzer.ToLocation(result.RuleLocation, configFiles)]
             : [];
 
-        report(Diagnostic.Create(AnalyzerDiagnostics.WarningDisallowedDependency, location, ruleLocations, null, result.Reason));
+        // The namespaces as data, for tools: the CLI's generate collects them.
+        ImmutableDictionary<string, string?> properties = ImmutableDictionary<string, string?>.Empty
+            .Add(Analyzer.SourceNamespaceProperty, sourceNamespace)
+            .Add(Analyzer.TargetNamespaceProperty, targetNamespace);
+
+        report(Diagnostic.Create(AnalyzerDiagnostics.WarningDisallowedDependency, location, ruleLocations, properties, result.Reason));
     }
 }

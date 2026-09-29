@@ -5,6 +5,12 @@ namespace DependencyGuard.Tests.Integration.Tests;
 [TestFixture]
 public sealed class IntegrationTestsTool : IntegrationTestsBase
 {
+    [SetUp]
+    public void WriteNamespaces()
+    {
+        WriteReferencedNamespaces();
+    }
+
     [Test]
     public async Task Tool_ShouldExitWithCode1AndReportDG0001_WhenDependencyIsNotAllowed()
     {
@@ -99,6 +105,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
               - from: MyApp.Application
                 to: MyApp.Infrastructure
             """, projectDir);
+        WriteReferencedNamespaces(projectDir);
         WriteSource("OrderService.cs", """
             namespace MyApp.Application;
             using MyApp.Infrastructure;
@@ -367,6 +374,130 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
         // Assert
         Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
         Assert.That(output, Does.Contain("dependency-guard.yaml(3,5): error DG0004: Unknown key 'too'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldReportTheUseInTheRazorFile_WhenComponentUsesDisallowedNamespace()
+    {
+        // Arrange: the CLI compiles the project like the build, source generators (Razor) included
+        WriteCsproj("MyProject", sdk: "Microsoft.NET.Sdk.Razor", items: """<FrameworkReference Include="Microsoft.AspNetCore.App" />""");
+        WriteYaml("""
+            allowed:
+              - from: .*
+                to: System.*
+              - from: .*
+                to: Microsoft.*
+            """);
+        WriteSource("Clock.cs", """
+            namespace MyApp.Infrastructure;
+            public static class Clock { public static string Now() { return "now"; } }
+            """);
+        Directory.CreateDirectory(Path.Combine(TestDirectory, "Components"));
+        WriteSource(Path.Combine("Components", "Page.razor"), """
+            @using MyApp.Infrastructure
+            <p>@Clock.Now()</p>
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Page.razor(2,"), $"Expected the use in Page.razor. Output:\n{output}");
+        Assert.That(output, Does.Contain("'MyProject.Components' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldReportDG0001_WhenTypeComesFromImplicitUsings()
+    {
+        // Arrange: File comes from System.IO through ImplicitUsings, without a using line in the file
+        WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: System
+            """);
+        WriteSource("Reader.cs", """
+            namespace MyApp.Application;
+            public class Reader
+            {
+                public string Read(string path) { return File.ReadAllText(path); }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyApp.Application' to depend on 'System.IO'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldCheckALinkedFile_WhenProjectCompilesASourceFromElsewhere()
+    {
+        // Arrange: shared/Clock.cs is outside the project's folder, compiled in with <Compile Include>
+        string projectDir = Path.Combine(TestDirectory, "project");
+        string sharedDir = Path.Combine(TestDirectory, "shared");
+        Directory.CreateDirectory(projectDir);
+        Directory.CreateDirectory(sharedDir);
+        WriteCsproj("MyProject", projectDir, items: """<Compile Include="..\shared\Clock.cs" Link="shared\Clock.cs" />""");
+        WriteReferencedNamespaces(projectDir);
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """, projectDir);
+        WriteSource("Clock.cs", """
+            namespace MyApp.Application;
+            public class Clock { private MyApp.Infrastructure.Repository? _repository; }
+            """, sharedDir);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(projectDir);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Clock.cs(2,"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldUseTheRuleFilesOfTheBuild_WhenMSBuildGivesThemToTheProject()
+    {
+        // Arrange: the rule file is not in the project's folder; only MSBuild knows it (DependencyGuardConfig)
+        WriteNuGetConfig();
+        string rules = Path.Combine(TestDirectory, "rules");
+        string projectDir = Path.Combine(TestDirectory, "project");
+        Directory.CreateDirectory(rules);
+        Directory.CreateDirectory(projectDir);
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """, rules);
+        File.WriteAllText(Path.Combine(TestDirectory, "Directory.Build.props"), """
+            <Project>
+              <ItemGroup>
+                <DependencyGuardConfig Include="$(MSBuildThisFileDirectory)rules\dependency-guard.yaml" />
+              </ItemGroup>
+            </Project>
+            """);
+        string version = IntegrationSetupFixture.AnalyzerPackageVersion;
+        string analyzerPackage = $"""<PackageReference Include="DependencyGuard.Analyzer" Version="{version}" />""";
+        WriteCsproj("MyProject", projectDir, items: analyzerPackage);
+        WriteReferencedNamespaces(projectDir);
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            using MyApp.Infrastructure;
+            public class Service { }
+            """, projectDir);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(projectDir);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
     }
 
     private static Task<(string Output, int ExitCode)> RunToolAsync(string targetPath, string extraArgs = "")

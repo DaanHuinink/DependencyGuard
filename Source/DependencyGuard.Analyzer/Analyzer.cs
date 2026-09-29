@@ -12,9 +12,26 @@ public sealed class Analyzer : DiagnosticAnalyzer
 {
     public const string ConfigFileName = "dependency-guard.yaml";
 
+    // Properties of every DG0001: the namespace that has the dependency and the one it depends on.
+    public const string SourceNamespaceProperty = "SourceNamespace";
+    public const string TargetNamespaceProperty = "TargetNamespace";
+
     // MSBuild's RootNamespace (build/DependencyGuard.Analyzer.props makes it visible): the namespace of code that
     // declares none, such as top-level statements.
     private const string RootNamespaceOption = "build_property.RootNamespace";
+
+    // The rule files when a host names them (the CLI's --config files may have any name); null in a build, where the
+    // rule files are the additional files named dependency-guard.yaml.
+    private readonly IReadOnlyList<AdditionalText>? _ruleFiles;
+
+    public Analyzer()
+    {
+    }
+
+    internal Analyzer(IReadOnlyList<AdditionalText> ruleFiles)
+    {
+        _ruleFiles = ruleFiles;
+    }
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
     [
@@ -34,7 +51,7 @@ public sealed class Analyzer : DiagnosticAnalyzer
         context.RegisterCompilationStartAction(OnCompilationStart);
     }
 
-    private static void OnCompilationStart(CompilationStartAnalysisContext contextStart)
+    private void OnCompilationStart(CompilationStartAnalysisContext contextStart)
     {
         try
         {
@@ -47,9 +64,9 @@ public sealed class Analyzer : DiagnosticAnalyzer
         }
     }
 
-    private static void RegisterAnalyzer(CompilationStartAnalysisContext contextStart)
+    private void RegisterAnalyzer(CompilationStartAnalysisContext contextStart)
     {
-        IReadOnlyList<AdditionalText> configFiles = GetConfigFiles(contextStart);
+        IReadOnlyList<AdditionalText> configFiles = _ruleFiles ?? GetConfigFiles(contextStart);
         if (!TryCreateRuleSets(contextStart, configFiles, out List<DependencyRuleSet> ruleSets))
         {
             return;

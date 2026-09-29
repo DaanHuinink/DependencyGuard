@@ -198,7 +198,7 @@ static void CheckCliResults(DemoProject[] projects, string output)
     foreach (DemoProject project in projects)
     {
         string result = skippedProjects.Contains(project.Name)
-            ? "skipped (no dependency-guard.yaml of its own; the CLI does not read MSBuild settings)"
+            ? "skipped (no rule file)"
             : $"{violations.GetValueOrDefault(project.Name)} x DG0001";
         Console.WriteLine($"  {project.Name}: {result}");
     }

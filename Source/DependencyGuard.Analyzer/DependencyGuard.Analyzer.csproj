@@ -38,6 +38,11 @@
     <ProjectReference Include="..\DependencyGuard.Core\DependencyGuard.Core.csproj" />
   </ItemGroup>
 
+  <!-- The CLI hosts the analyzer and hands it the rule files. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DependencyGuard.Cli" />
+  </ItemGroup>
+
   <Target Name="AddAnalyzerToPackage" AfterTargets="Build">
     <ItemGroup>
       <None Include="$(TargetDir)DependencyGuard.Analyzer.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />

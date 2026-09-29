@@ -9,20 +9,9 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         $"""<PackageReference Include="DependencyGuard.Analyzer" Version="{IntegrationSetupFixture.AnalyzerPackageVersion}" />""";
 
     [SetUp]
-    public void WriteNuGetConfig()
+    public void UseTheFixturesPackage()
     {
-        File.WriteAllText(Path.Combine(TestDirectory, "NuGet.Config"), $"""
-            <?xml version="1.0" encoding="utf-8"?>
-            <configuration>
-              <config>
-                <add key="globalPackagesFolder" value="{Path.Combine(IntegrationSetupFixture.LocalPackagesDir, "packages")}" />
-              </config>
-              <packageSources>
-                <add key="local" value="{IntegrationSetupFixture.LocalPackagesDir}" />
-                <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-              </packageSources>
-            </configuration>
-            """);
+        WriteNuGetConfig();
     }
 
     [Test]

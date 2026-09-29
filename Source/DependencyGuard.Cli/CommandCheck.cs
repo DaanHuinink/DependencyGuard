@@ -1,52 +1,46 @@
-using DependencyGuard.Core.Interfaces;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DependencyGuard.Cli;
 
 internal static class CommandCheck
 {
-    private const string DefaultConfigFileName = "dependency-guard.yaml";
-
-    internal static int Run(string[] args)
+    internal static async Task<int> RunAsync(string[] args)
     {
-        List<string> globalConfigPaths = [];
+        List<string> configPaths = [];
+        bool restore = true;
         Dictionary<string, Action<string>> valueOptions = new()
         {
-            ["--config"] = value => globalConfigPaths.Add(Path.GetFullPath(value)),
-            ["-c"] = value => globalConfigPaths.Add(Path.GetFullPath(value)),
+            ["--config"] = value => configPaths.Add(Path.GetFullPath(value)),
+            ["-c"] = value => configPaths.Add(Path.GetFullPath(value)),
         };
+        Dictionary<string, Action> flags = new() { ["--no-restore"] = () => restore = false };
 
-        string? usageError = Program.ParseArguments(args, valueOptions, new Dictionary<string, Action>(), out string targetPath);
+        string? usageError = Program.ParseArguments(args, valueOptions, flags, out string targetPath);
         if (usageError is not null)
         {
             return Program.UsageError(usageError);
         }
 
-        string? missingConfig = globalConfigPaths.FirstOrDefault(path => !File.Exists(path));
+        string? missingConfig = configPaths.FirstOrDefault(path => !File.Exists(path));
         if (missingConfig is not null)
         {
             return Program.UsageError($"Config file not found: {missingConfig}");
         }
 
-        if (!Program.TryResolveProjectFiles(targetPath, out List<string> projectFiles, out string? error))
+        using ProjectsLoader loader = new();
+        (IReadOnlyList<Project> projects, string? error) = await loader.LoadAsync(targetPath, restore);
+        if (error is not null)
         {
-            return Program.UsageError(error!);
+            return Program.UsageError(error);
         }
 
         int totalViolations = 0;
         int invalidConfigs = 0;
-        foreach (string projectFile in projectFiles)
+        foreach (Project project in projects.OrderBy(p => p.Name, StringComparer.Ordinal))
         {
-            if (TryAnalyzeProject(projectFile, globalConfigPaths, out int violations))
-            {
-                totalViolations += violations;
-            }
-            else
-            {
-                invalidConfigs++;
-            }
+            (int violations, bool isValid) = await CheckProjectAsync(project, configPaths);
+            totalViolations += violations;
+            invalidConfigs += isValid ? 0 : 1;
         }
 
         Console.WriteLine();
@@ -69,178 +63,47 @@ internal static class CommandCheck
         return 0;
     }
 
-    // Returns false when the project's configuration can't be parsed or contains conflicting rules.
-    private static bool TryAnalyzeProject(string projectFile, IReadOnlyList<string> globalConfigPaths, out int violations)
+    // IsValid is false when a rule file has mistakes or conflicting rules (DG0003, DG0004).
+    private static async Task<(int Violations, bool IsValid)> CheckProjectAsync(Project project, IReadOnlyList<string> configPaths)
     {
-        violations = 0;
-        string projectDir = Path.GetDirectoryName(projectFile)!;
-        string projectName = Path.GetFileNameWithoutExtension(projectFile);
-
-        // Like the analyzer: the --config files and the project's own file, merged.
-        string projectConfigPath = Path.Combine(projectDir, DefaultConfigFileName);
-        List<string> configPaths = [.. globalConfigPaths];
-        if (File.Exists(projectConfigPath) && !configPaths.Contains(projectConfigPath, StringComparer.OrdinalIgnoreCase))
+        IReadOnlyList<AdditionalText> ruleFiles = ProjectsAnalysis.GetRuleFiles(project, configPaths);
+        if (ruleFiles.Count == 0)
         {
-            configPaths.Add(projectConfigPath);
+            Console.WriteLine($"[skip] {project.Name}: no {Analyzer.Analyzer.ConfigFileName} found");
+            return (0, true);
         }
 
-        if (configPaths.Count == 0)
+        Console.WriteLine($"\n{project.Name} ({project.DocumentIds.Count} files)");
+        ProjectAnalysis analysis = await ProjectsAnalysis.AnalyzeAsync(project, ruleFiles);
+        if (analysis.CompileErrors > 0)
         {
-            Console.WriteLine($"[skip] {projectName}: no {DefaultConfigFileName} found");
-            return true;
+            Program.PrintWarning($"  [warn] {analysis.CompileErrors} compile error(s): names that do not resolve are not checked.");
         }
 
-        if (!TryLoadAnalyzer(configPaths, projectName, out IDependencyAnalyzer? analyzer))
+        int violations = 0;
+        bool isValid = true;
+        IEnumerable<Diagnostic> inFileOrder = analysis.Diagnostics
+            .OrderBy(d => d.Location.GetMappedLineSpan().Path, StringComparer.Ordinal)
+            .ThenBy(d => d.Location.GetMappedLineSpan().StartLinePosition);
+        foreach (Diagnostic diagnostic in inFileOrder)
         {
-            return false;
+            if (diagnostic.Id == "DG0001")
+            {
+                Program.PrintWarning($"  {Program.Format(diagnostic)}");
+                violations++;
+            }
+            else
+            {
+                Program.PrintError($"[error] {project.Name}: {Program.Format(diagnostic)}");
+                isValid = false;
+            }
         }
 
-        string[] sourceFiles = Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !Program.IsInObjOrBin(f, projectDir))
-            .ToArray();
-
-        Console.WriteLine($"\n{projectName} ({sourceFiles.Length} files)");
-
-        string rootNamespace = Program.GetRootNamespace(projectFile);
-        violations = sourceFiles.Sum(f => AnalyzeFile(f, rootNamespace, analyzer!));
-
-        if (violations == 0)
+        if (violations == 0 && isValid)
         {
             Program.PrintSuccess("  No violations.");
         }
 
-        return true;
-    }
-
-    private static bool TryLoadAnalyzer(IReadOnlyList<string> configPaths, string projectName, out IDependencyAnalyzer? analyzer)
-    {
-        analyzer = null;
-        List<DependencyRuleSet> ruleSets = [];
-        bool isValid = true;
-        foreach (string configPath in configPaths)
-        {
-            try
-            {
-                ruleSets.Add(DependencyGuardFactory.ParseFromYaml(File.ReadAllText(configPath), configPath));
-            }
-            catch (RuleSetException exception)
-            {
-                foreach (RuleSetError error in exception.Errors)
-                {
-                    string place = error.Location is null
-                        ? configPath
-                        : $"{error.Location.FilePath}({error.Location.Line + 1},{error.Location.Column + 1})";
-                    Program.PrintError($"[error] {projectName}: {place}: error DG0004: {error.Message}");
-                }
-
-                isValid = false;
-            }
-            catch (Exception ex)
-            {
-                Program.PrintError($"[error] {projectName}: failed to parse config {configPath}: {ex.Message}");
-                isValid = false;
-            }
-        }
-
-        if (!isValid)
-        {
-            return false;
-        }
-
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer(ruleSets, out analyzer);
-        foreach (RuleConflict conflict in conflicts)
-        {
-            Program.PrintError($"[error] {projectName}: {conflict.Message}");
-        }
-
-        return conflicts.Count == 0;
-    }
-
-    private static int AnalyzeFile(string sourceFile, string rootNamespace, IDependencyAnalyzer analyzer)
-    {
-        SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(sourceFile), path: sourceFile);
-        return AnalyzeUsingDirectives(sourceFile, tree, rootNamespace, analyzer)
-               + AnalyzeQualifiedNames(sourceFile, tree, rootNamespace, analyzer);
-    }
-
-    private static int AnalyzeUsingDirectives(string sourceFile, SyntaxTree tree, string rootNamespace, IDependencyAnalyzer analyzer)
-    {
-        int violations = 0;
-
-        foreach (UsingDirectiveSyntax usingDir in tree.GetCompilationUnitRoot().DescendantNodes().OfType<UsingDirectiveSyntax>())
-        {
-            if (usingDir.Alias is not null ||
-                usingDir.StaticKeyword.IsKind(SyntaxKind.StaticKeyword) ||
-                usingDir.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
-            {
-                continue;
-            }
-
-            string targetNs = usingDir.NamespaceOrType.ToString();
-            foreach (string sourceNs in Program.GetUsingSourceNamespaces(usingDir, rootNamespace))
-            {
-                if (targetNs == sourceNs)
-                {
-                    continue;
-                }
-
-                DependencyResult result = analyzer.AnalyzeDependency(new(sourceNs, targetNs));
-                if (!result.IsAllowed)
-                {
-                    ReportViolation(sourceFile, usingDir.GetLocation(), result.Reason);
-                    violations++;
-                }
-            }
-        }
-
-        return violations;
-    }
-
-    private static int AnalyzeQualifiedNames(string sourceFile, SyntaxTree tree, string rootNamespace, IDependencyAnalyzer analyzer)
-    {
-        int violations = 0;
-
-        foreach (QualifiedNameSyntax qualName in tree.GetCompilationUnitRoot()
-                     .DescendantNodes()
-                     .OfType<QualifiedNameSyntax>())
-        {
-            if (qualName.Parent is QualifiedNameSyntax)
-            {
-                continue;
-            }
-
-            // The name of a namespace declaration (`namespace MyApp.Application`) is not a reference.
-            if (qualName.Parent is BaseNamespaceDeclarationSyntax)
-            {
-                continue;
-            }
-
-            if (qualName.Ancestors().OfType<UsingDirectiveSyntax>().Any())
-            {
-                continue;
-            }
-
-            string targetNs = qualName.Left.ToString();
-            string sourceNs = Program.GetContainingNamespace(qualName, rootNamespace);
-            if (targetNs == sourceNs)
-            {
-                continue;
-            }
-
-            DependencyResult result = analyzer.AnalyzeDependency(new(sourceNs, targetNs));
-            if (!result.IsAllowed)
-            {
-                ReportViolation(sourceFile, qualName.GetLocation(), result.Reason);
-                violations++;
-            }
-        }
-
-        return violations;
-    }
-
-    private static void ReportViolation(string sourceFile, Location location, string? reason)
-    {
-        FileLinePositionSpan span = location.GetLineSpan();
-        Program.PrintWarning($"  {sourceFile}({span.StartLinePosition.Line + 1},{span.StartLinePosition.Character + 1}): warning DG0001: {reason}");
+        return (violations, isValid);
     }
 }

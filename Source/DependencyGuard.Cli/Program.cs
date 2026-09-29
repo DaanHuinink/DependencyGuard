@@ -1,21 +1,19 @@
 using System.Reflection;
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DependencyGuard.Cli;
 
-internal static partial class Program
+internal static class Program
 {
     private const string Usage = """
         Usage:
-          dependency-guard [check] [--config <file>]... [<target>]
-          dependency-guard generate [--output <file>] [--force] [<target>]
+          dependency-guard [check] [--config <file>]... [--no-restore] [<target>]
+          dependency-guard generate [--output <file>] [--force] [--no-restore] [<target>]
 
         <target>  A .csproj, .sln or .slnx file, or a folder with a .csproj. Default: the current folder.
 
-        check     Checks every project against its own dependency-guard.yaml and the --config files, merged.
+        check     Checks every project the way the build does (the same analyzer, on the same compilation) against its
+                  rule files, merged with the --config files.
                   Exit codes: 0 no violations, 1 violations or an invalid rule file, 2 usage error.
         generate  Writes a dependency-guard.yaml that allows every dependency the code has today: one per project,
                   or one for all projects with --output. Exit codes: 0 written, 2 failed or usage error.
@@ -24,18 +22,19 @@ internal static partial class Program
           -c, --config <file>  A rule file for every project, on top of the project's own. May be repeated.
           -o, --output <file>  Write one rule file for all projects.
               --force          Overwrite an existing rule file.
+              --no-restore     Skip 'dotnet restore' (the projects must be restored already).
           -h, --help           Show this help.
               --version        Show the version.
 
-        The CLI reads the .cs files in a project's folder, without building: it checks using directives and
-        fully qualified names. The analyzer checks more (every name, Razor files); see the README.
+        Needs the .NET 10 SDK: MSBuild evaluates the projects and they are compiled in memory, source generators
+        (Razor) included, without a build.
         """;
 
-    private static int Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         try
         {
-            return RunMain(args);
+            return await RunMainAsync(args);
         }
         catch (Exception ex)
         {
@@ -44,30 +43,30 @@ internal static partial class Program
         }
     }
 
-    private static int RunMain(string[] args)
+    private static Task<int> RunMainAsync(string[] args)
     {
         if (args.Any(a => a is "--help" or "-h" or "-?" or "/?"))
         {
             Console.WriteLine($"DependencyGuard {GetVersion()}: namespace dependency rules for C#.");
             Console.WriteLine();
             Console.WriteLine(Usage);
-            return 0;
+            return Task.FromResult(0);
         }
 
         if (args.Any(a => a == "--version"))
         {
             Console.WriteLine(GetVersion());
-            return 0;
+            return Task.FromResult(0);
         }
 
         if (args.Length > 0 && args[0] == "generate")
         {
-            return CommandGenerate.Run(args[1..]);
+            return CommandGenerate.RunAsync(args[1..]);
         }
 
         // "check" subcommand or bare invocation (backward compat)
         string[] checkArgs = args.Length > 0 && args[0] == "check" ? args[1..] : args;
-        return CommandCheck.Run(checkArgs);
+        return CommandCheck.RunAsync(checkArgs);
     }
 
     internal static int UsageError(string message)
@@ -85,6 +84,20 @@ internal static partial class Program
 
         // The SDK appends the commit (1.2.3+abcdef): the version alone is enough here.
         return version.Split('+')[0];
+    }
+
+    // Like the build: path(line,column): severity id: message, with the path of the .razor file for Razor code.
+    internal static string Format(Diagnostic diagnostic)
+    {
+        string severity = diagnostic.Severity == DiagnosticSeverity.Error ? "error" : "warning";
+        string text = $"{severity} {diagnostic.Id}: {diagnostic.GetMessage()}";
+        if (diagnostic.Location == Location.None)
+        {
+            return text;
+        }
+
+        FileLinePositionSpan span = diagnostic.Location.GetMappedLineSpan();
+        return $"{span.Path}({span.StartLinePosition.Line + 1},{span.StartLinePosition.Character + 1}): {text}";
     }
 
     internal static void PrintSuccess(string message)
@@ -108,117 +121,7 @@ internal static partial class Program
         Console.ResetColor();
     }
 
-    internal static bool IsInObjOrBin(string filePath, string projectDir)
-    {
-        string rel = Path.GetRelativePath(projectDir, filePath);
-        return rel.StartsWith("obj" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-               || rel.StartsWith("bin" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
-
-    // The full name of the namespace a node is in (A.B for `namespace A { namespace B { } }`), or the project's root
-    // namespace for code outside every namespace.
-    internal static string GetContainingNamespace(SyntaxNode node, string rootNamespace)
-    {
-        string[] names = node.Ancestors()
-            .OfType<BaseNamespaceDeclarationSyntax>()
-            .Reverse()
-            .Select(ns => ns.Name.ToString())
-            .ToArray();
-
-        return names.Length > 0 ? string.Join(".", names) : rootNamespace;
-    }
-
-    // A using directive belongs to the namespace it is written in; one above all namespaces serves the whole file:
-    // every namespace in it, and the root namespace for code outside them.
-    internal static IEnumerable<string> GetUsingSourceNamespaces(UsingDirectiveSyntax usingDirective, string rootNamespace)
-    {
-        if (usingDirective.Parent is BaseNamespaceDeclarationSyntax declaration)
-        {
-            return [GetContainingNamespace(declaration.Name, rootNamespace)];
-        }
-
-        CompilationUnitSyntax file = (CompilationUnitSyntax)usingDirective.Parent!;
-        List<string> namespaces = file.Members
-            .OfType<BaseNamespaceDeclarationSyntax>()
-            .Select(ns => ns.Name.ToString())
-            .ToList();
-
-        if (namespaces.Count == 0 || file.Members.Any(member => member is not BaseNamespaceDeclarationSyntax))
-        {
-            namespaces.Add(rootNamespace);
-        }
-
-        return namespaces.Distinct(StringComparer.Ordinal);
-    }
-
-    // What MSBuild would use as RootNamespace: the project's <RootNamespace>, else the project file's name.
-    internal static string GetRootNamespace(string projectFile)
-    {
-        try
-        {
-            string? rootNamespace = XDocument.Load(projectFile)
-                .Descendants()
-                .FirstOrDefault(e => e.Name.LocalName == "RootNamespace")
-                ?.Value
-                .Trim();
-
-            if (!string.IsNullOrEmpty(rootNamespace) && !rootNamespace!.Contains("$("))
-            {
-                return rootNamespace;
-            }
-        }
-        catch (System.Xml.XmlException)
-        {
-            // An unreadable project file: fall back to its name.
-        }
-
-        return Path.GetFileNameWithoutExtension(projectFile);
-    }
-
-    internal static bool TryResolveProjectFiles(string targetPath, out List<string> projectFiles, out string? error)
-    {
-        projectFiles = [];
-        error = null;
-
-        if (Directory.Exists(targetPath))
-        {
-            projectFiles = [.. Directory.GetFiles(targetPath, "*.csproj", SearchOption.TopDirectoryOnly)];
-            if (projectFiles.Count == 0)
-            {
-                error = $"No .csproj found in: {targetPath}";
-            }
-
-            return projectFiles.Count > 0;
-        }
-
-        if (!File.Exists(targetPath))
-        {
-            error = $"File not found: {targetPath}";
-            return false;
-        }
-
-        if (targetPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
-        {
-            projectFiles = ParseSlnx(targetPath);
-        }
-        else if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
-        {
-            projectFiles = ParseSln(targetPath);
-        }
-        else if (targetPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-        {
-            projectFiles = [targetPath];
-        }
-        else
-        {
-            error = $"Expected a .csproj, .sln, .slnx, or directory. Got: {targetPath}";
-            return false;
-        }
-
-        return true;
-    }
-
-    // Reads `--name value` options and at most one target; returns an error for anything else.
+    // Reads `--name value` options, flags and at most one target; returns an error for anything else.
     internal static string? ParseArguments(
         string[] args,
         IReadOnlyDictionary<string, Action<string>> valueOptions,
@@ -260,28 +163,4 @@ internal static partial class Program
 
         return null;
     }
-
-    private static List<string> ParseSlnx(string path)
-    {
-        string dir = Path.GetDirectoryName(path)!;
-        return XDocument.Load(path)
-            .Descendants("Project")
-            .Select(e => e.Attribute("Path")?.Value)
-            .Where(p => p is not null && p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-            .Select(p => Path.GetFullPath(Path.Combine(dir, p!.Replace('/', Path.DirectorySeparatorChar))))
-            .ToList();
-    }
-
-    private static List<string> ParseSln(string path)
-    {
-        string dir = Path.GetDirectoryName(path)!;
-        return File.ReadLines(path)
-            .Select(line => CreateProjectMatcherRegex().Match(line))
-            .Where(m => m.Success)
-            .Select(m => Path.GetFullPath(Path.Combine(dir, m.Groups[1].Value.Replace('\\', Path.DirectorySeparatorChar))))
-            .ToList();
-    }
-
-    [GeneratedRegex(@"Project\(.*?\) = ""[^""]+"", ""([^""]+\.csproj)""")]
-    private static partial Regex CreateProjectMatcherRegex();
 }

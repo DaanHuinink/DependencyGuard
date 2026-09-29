@@ -5,6 +5,12 @@ namespace DependencyGuard.Tests.Integration.Tests;
 [TestFixture]
 public sealed class IntegrationTestsInspector : IntegrationTestsBase
 {
+    [SetUp]
+    public void WriteNamespaces()
+    {
+        WriteReferencedNamespaces();
+    }
+
     private const string ExistingConfig = "# existing config\n";
 
     private string ConfigPath => Path.Combine(TestDirectory, "dependency-guard.yaml");
@@ -68,7 +74,7 @@ public sealed class IntegrationTestsInspector : IntegrationTestsBase
             {
                 public class Service
                 {
-                    MyApp.Domain.Entity _e = null!;
+                    MyApp.Domain.Order _order = null!;
                 }
             }
             """);
@@ -161,6 +167,8 @@ public sealed class IntegrationTestsInspector : IntegrationTestsBase
         WriteCsproj("Second", second);
         WriteSource("A.cs", "namespace MyApp.First;\nusing MyApp.Domain;\n", first);
         WriteSource("B.cs", "namespace MyApp.Second;\nusing MyApp.Infrastructure;\n", second);
+        WriteReferencedNamespaces(first);
+        WriteReferencedNamespaces(second);
         string solution = Path.Combine(TestDirectory, "Both.slnx");
         File.WriteAllText(solution, """
             <Solution>
@@ -202,6 +210,28 @@ public sealed class IntegrationTestsInspector : IntegrationTestsBase
         Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
         string yaml = await File.ReadAllTextAsync(ConfigPath);
         Assert.That(yaml, Does.Contain("from: MyApp.Application"), $"YAML:\n{yaml}");
+    }
+
+    [Test]
+    public async Task Generate_ShouldWriteWhatTheCompilerSees_WhenTypeComesFromImplicitUsings()
+    {
+        // Arrange: File comes from System.IO through ImplicitUsings, without a using line in the file
+        WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
+        WriteSource("Reader.cs", """
+            namespace MyApp.Application;
+            public class Reader
+            {
+                public string Read(string path) { return File.ReadAllText(path); }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunGenerateAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        string yaml = await File.ReadAllTextAsync(ConfigPath);
+        Assert.That(yaml, Does.Contain("to: System.IO"), $"YAML:\n{yaml}");
     }
 
     private static Task<(string Output, int ExitCode)> RunGenerateAsync(string targetPath, string extraArgs = "")

@@ -1,24 +1,25 @@
 using DependencyGuard.Core.Interfaces;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DependencyGuard.Cli;
 
 internal static class CommandGenerate
 {
-    private const string DefaultOutputFileName = "dependency-guard.yaml";
-
-    internal static int Run(string[] args)
+    internal static async Task<int> RunAsync(string[] args)
     {
         string? outputPath = null;
         bool force = false;
+        bool restore = true;
         Dictionary<string, Action<string>> valueOptions = new()
         {
             ["--output"] = value => outputPath = Path.GetFullPath(value),
             ["-o"] = value => outputPath = Path.GetFullPath(value),
         };
-        Dictionary<string, Action> flags = new() { ["--force"] = () => force = true };
+        Dictionary<string, Action> flags = new()
+        {
+            ["--force"] = () => force = true,
+            ["--no-restore"] = () => restore = false,
+        };
 
         string? usageError = Program.ParseArguments(args, valueOptions, flags, out string targetPath);
         if (usageError is not null)
@@ -26,14 +27,16 @@ internal static class CommandGenerate
             return Program.UsageError(usageError);
         }
 
-        if (!Program.TryResolveProjectFiles(targetPath, out List<string> projectFiles, out string? error))
+        using ProjectsLoader loader = new();
+        (IReadOnlyList<Project> projects, string? error) = await loader.LoadAsync(targetPath, restore);
+        if (error is not null)
         {
-            return Program.UsageError(error!);
+            return Program.UsageError(error);
         }
 
         bool written = outputPath is null
-            ? GeneratePerProject(projectFiles, force)
-            : GenerateOneFile(projectFiles, outputPath, force);
+            ? await GeneratePerProjectAsync(projects, force)
+            : await GenerateOneFileAsync(projects, outputPath, force);
 
         Console.WriteLine();
         if (!written)
@@ -46,20 +49,25 @@ internal static class CommandGenerate
         return 0;
     }
 
-    private static bool GeneratePerProject(IReadOnlyList<string> projectFiles, bool force)
+    // A file next to each project; a project that targets several frameworks gets the rules of all of them.
+    private static async Task<bool> GeneratePerProjectAsync(IReadOnlyList<Project> projects, bool force)
     {
         int errors = 0;
-        foreach (string projectFile in projectFiles)
+        foreach (IGrouping<string, Project> project in projects.GroupBy(p => p.FilePath!, StringComparer.OrdinalIgnoreCase))
         {
-            string outPath = Path.Combine(Path.GetDirectoryName(projectFile)!, DefaultOutputFileName);
-            if (!CanWrite(outPath, force, Path.GetFileNameWithoutExtension(projectFile)))
+            string outPath = Path.Combine(Path.GetDirectoryName(project.Key)!, Analyzer.Analyzer.ConfigFileName);
+            if (!CanWrite(outPath, force, Path.GetFileNameWithoutExtension(project.Key)))
             {
                 errors++;
                 continue;
             }
 
             DependencyRuleSetBuilder builder = new();
-            CollectProject(projectFile, builder);
+            foreach (Project framework in project)
+            {
+                await CollectAsync(framework, builder);
+            }
+
             Write(builder, outPath);
         }
 
@@ -67,7 +75,7 @@ internal static class CommandGenerate
     }
 
     // With --output, the rules of every project go into one file, e.g. one for the whole solution.
-    private static bool GenerateOneFile(IReadOnlyList<string> projectFiles, string outputPath, bool force)
+    private static async Task<bool> GenerateOneFileAsync(IReadOnlyList<Project> projects, string outputPath, bool force)
     {
         if (!CanWrite(outputPath, force, "all projects"))
         {
@@ -75,13 +83,34 @@ internal static class CommandGenerate
         }
 
         DependencyRuleSetBuilder builder = new();
-        foreach (string projectFile in projectFiles)
+        foreach (Project project in projects.OrderBy(p => p.Name, StringComparer.Ordinal))
         {
-            CollectProject(projectFile, builder);
+            await CollectAsync(project, builder);
         }
 
         Write(builder, outputPath);
         return true;
+    }
+
+    // With a rule file that allows nothing, the analyzer reports every dependency, with its namespaces as properties.
+    private static async Task CollectAsync(Project project, DependencyRuleSetBuilder builder)
+    {
+        Console.WriteLine($"\n{project.Name} ({project.DocumentIds.Count} files)");
+        ProjectAnalysis analysis = await ProjectsAnalysis.AnalyzeAsync(project, ProjectsAnalysis.GetEmptyRuleFile(project));
+        if (analysis.CompileErrors > 0)
+        {
+            Program.PrintWarning($"  [warn] {analysis.CompileErrors} compile error(s): names that do not resolve are left out.");
+        }
+
+        foreach (Diagnostic diagnostic in analysis.Diagnostics.Where(d => d.Id == "DG0001"))
+        {
+            if (diagnostic.Properties.TryGetValue(Analyzer.Analyzer.SourceNamespaceProperty, out string? source) &&
+                diagnostic.Properties.TryGetValue(Analyzer.Analyzer.TargetNamespaceProperty, out string? target) &&
+                source is not null && target is not null)
+            {
+                builder.AddAllow(source, target);
+            }
+        }
     }
 
     private static bool CanWrite(string outPath, bool force, string subject)
@@ -93,24 +122,6 @@ internal static class CommandGenerate
         }
 
         return true;
-    }
-
-    private static void CollectProject(string projectFile, DependencyRuleSetBuilder builder)
-    {
-        string projectDir = Path.GetDirectoryName(projectFile)!;
-        string rootNamespace = Program.GetRootNamespace(projectFile);
-        string[] sourceFiles = Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !Program.IsInObjOrBin(f, projectDir))
-            .ToArray();
-
-        Console.WriteLine($"\n{Path.GetFileNameWithoutExtension(projectFile)} ({sourceFiles.Length} files)");
-
-        foreach (string sourceFile in sourceFiles)
-        {
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(sourceFile), path: sourceFile);
-            CollectUsingDependencies(tree, rootNamespace, builder);
-            CollectQualifiedNameDependencies(tree, rootNamespace, builder);
-        }
     }
 
     private static void Write(DependencyRuleSetBuilder builder, string outPath)
@@ -128,60 +139,5 @@ internal static class CommandGenerate
         string yaml = DependencyGuardFactory.SerializeToYaml(ruleSet);
         File.WriteAllText(outPath, yaml);
         Program.PrintSuccess($"  Written: {outPath}");
-    }
-
-    private static void CollectUsingDependencies(SyntaxTree tree, string rootNamespace, DependencyRuleSetBuilder builder)
-    {
-        foreach (UsingDirectiveSyntax usingDir in tree.GetCompilationUnitRoot().DescendantNodes().OfType<UsingDirectiveSyntax>())
-        {
-            if (usingDir.Alias is not null ||
-                usingDir.StaticKeyword.IsKind(SyntaxKind.StaticKeyword) ||
-                usingDir.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
-            {
-                continue;
-            }
-
-            string targetNs = usingDir.NamespaceOrType.ToString();
-            foreach (string sourceNs in Program.GetUsingSourceNamespaces(usingDir, rootNamespace))
-            {
-                if (targetNs != sourceNs)
-                {
-                    builder.AddAllow(sourceNs, targetNs);
-                }
-            }
-        }
-    }
-
-    private static void CollectQualifiedNameDependencies(SyntaxTree tree, string rootNamespace, DependencyRuleSetBuilder builder)
-    {
-        foreach (QualifiedNameSyntax qualName in tree.GetCompilationUnitRoot()
-            .DescendantNodes()
-            .OfType<QualifiedNameSyntax>())
-        {
-            if (qualName.Parent is QualifiedNameSyntax)
-            {
-                continue;
-            }
-
-            // The name of a namespace declaration (`namespace MyApp.Application`) is not a reference.
-            if (qualName.Parent is BaseNamespaceDeclarationSyntax)
-            {
-                continue;
-            }
-
-            if (qualName.Ancestors().OfType<UsingDirectiveSyntax>().Any())
-            {
-                continue;
-            }
-
-            string targetNs = qualName.Left.ToString();
-            string sourceNs = Program.GetContainingNamespace(qualName, rootNamespace);
-            if (targetNs == sourceNs)
-            {
-                continue;
-            }
-
-            builder.AddAllow(sourceNs, targetNs);
-        }
     }
 }

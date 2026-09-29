@@ -57,11 +57,39 @@ public abstract class IntegrationTestsBase
         File.WriteAllText(Path.Combine(dir ?? TestDirectory, filename), content);
     }
 
-    // The CLI is built once by IntegrationSetupFixture, so every run can skip the build.
+    // Restores from the analyzer package the fixture packed, into a folder of the test run's own (not the machine's
+    // NuGet cache).
+    protected void WriteNuGetConfig(string? dir = null)
+    {
+        File.WriteAllText(Path.Combine(dir ?? TestDirectory, "NuGet.Config"), $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <configuration>
+              <config>
+                <add key="globalPackagesFolder" value="{Path.Combine(IntegrationSetupFixture.LocalPackagesDir, "packages")}" />
+              </config>
+              <packageSources>
+                <add key="local" value="{IntegrationSetupFixture.LocalPackagesDir}" />
+                <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+              </packageSources>
+            </configuration>
+            """);
+    }
+
+    // The namespaces the tests' sources refer to. The CLI compiles the projects like the build, and a name that does
+    // not resolve is not checked.
+    protected void WriteReferencedNamespaces(string? dir = null)
+    {
+        WriteSource("ReferencedNamespaces.cs", """
+            namespace MyApp.Domain { public class Order { } }
+            namespace MyApp.Infrastructure { public class Repository { } }
+            """, dir);
+    }
+
+    // The CLI is built once by IntegrationSetupFixture; every test starts the built assembly.
     protected static Task<(string Output, int ExitCode)> RunCliAsync(string arguments)
     {
         return IntegrationSetupFixture.RunAsync(
             "dotnet",
-            $"run --no-build --project \"{IntegrationSetupFixture.ToolProjectPath}\" -- {arguments}");
+            $"\"{IntegrationSetupFixture.ToolAssemblyPath}\" {arguments}");
     }
 }

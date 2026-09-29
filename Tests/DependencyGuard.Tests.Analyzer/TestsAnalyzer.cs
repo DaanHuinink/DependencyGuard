@@ -1175,4 +1175,24 @@ public sealed class TestsAnalyzer
         // Assert
         Assert.That(diagnostics.Select(d => SourceAt(d, source)).ToArray(), Is.EqualTo(new[] { "var" }));
     }
+
+    [Test]
+    public async Task Analyzer_ShouldGiveTheNamespacesAsProperties_WhenDependencyIsNotAllowed()
+    {
+        // Arrange: tools read them instead of the message (the CLI's generate collects them)
+        const string source = """
+            namespace MyApp.Application
+            {
+                using MyApp.Infrastructure;
+            }
+            """;
+
+        // Act
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
+
+        // Assert
+        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics[0].Properties[DependencyGuard.Analyzer.Analyzer.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
+        Assert.That(diagnostics[0].Properties[DependencyGuard.Analyzer.Analyzer.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
+    }
 }
