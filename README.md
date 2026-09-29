@@ -237,6 +237,17 @@ MyApp.Application (14 files)
 Found 1 violation(s).
 ```
 
+## Testing a rule file
+
+The `DependencyGuard.Core` package holds the rules engine. A test can use it to check that the rule file still says
+what the architecture says, so a violation is not "fixed" by loosening a rule:
+
+```csharp
+DependencyRuleSet rules = DependencyGuardFactory.ParseFromYaml(File.ReadAllText(path), path);
+DependencyGuardFactory.TryCreateAnalyzer([rules], out IDependencyAnalyzer? analyzer);
+Assert.That(analyzer!.AnalyzeDependency(new("MyApp.Domain", "MyApp.Infrastructure")).IsAllowed, Is.False);
+```
+
 ## Diagnostics
 
 | ID | Severity | Meaning |

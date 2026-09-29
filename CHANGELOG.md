@@ -16,6 +16,10 @@ The fixes are described, with examples, in [Docs/Bugs-0.1.md](Docs/Bugs-0.1.md).
 - CLI: `--config` adds to the project's own `dependency-guard.yaml` instead of replacing it, and may be repeated.
 - CLI: `generate --output` writes one file with the rules of every project.
 
+### Added
+
+- The `DependencyGuard.Core` package (the rules engine), to test what a rule file allows.
+
 ### Removed
 
 - `exposedTo`. Write a `denied` rule for everyone and an `allowed` rule for the consumers instead.
