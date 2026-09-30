@@ -6,18 +6,18 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace DependencyGuard.Roslyn.Internal;
 
-internal static class RoslynDependencyAnalyzerRuleFiles
+internal static class DependencyRoslynAnalyzerRuleFiles
 {
     public static IReadOnlyList<AdditionalText> Find(IEnumerable<AdditionalText> additionalFiles)
     {
         return additionalFiles
-            .Where(f => string.Equals(Path.GetFileName(f.Path), RoslynDependencyAnalyzerContract.ConfigFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(f => string.Equals(Path.GetFileName(f.Path), DependencyRoslynAnalyzerContract.ConfigFileName, StringComparison.OrdinalIgnoreCase))
             .GroupBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToArray();
     }
 
-    public static RoslynDependencyAnalyzerRules Read(IReadOnlyList<AdditionalText> ruleFiles)
+    public static DependencyRoslynAnalyzerRules Read(IReadOnlyList<AdditionalText> ruleFiles)
     {
         List<DependencyRuleSet> ruleSets = [];
         List<Diagnostic> mistakes = [];
@@ -40,7 +40,7 @@ internal static class RoslynDependencyAnalyzerRuleFiles
             catch (Exception exception)
             {
                 mistakes.Add(Diagnostic.Create(
-                    RoslynDependencyAnalyzerDiagnostics.ErrorInvalidRuleFile,
+                    DependencyRoslynAnalyzerDiagnostics.ErrorInvalidRuleFile,
                     Location.None,
                     $"{ruleFile.Path}: {exception.Message}"));
             }
@@ -53,7 +53,7 @@ internal static class RoslynDependencyAnalyzerRuleFiles
 
         if (ruleSets.Count == 0)
         {
-            return new(null, [Diagnostic.Create(RoslynDependencyAnalyzerDiagnostics.WarningConfigurationMissing, Location.None)]);
+            return new(null, [Diagnostic.Create(DependencyRoslynAnalyzerDiagnostics.WarningConfigurationMissing, Location.None)]);
         }
 
         IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer(
@@ -106,7 +106,7 @@ internal static class RoslynDependencyAnalyzerRuleFiles
         Location location = error.Location is null
             ? Location.None
             : ToLocation(error.Location, ruleFiles);
-        return Diagnostic.Create(RoslynDependencyAnalyzerDiagnostics.ErrorInvalidRuleFile, location, error.Message);
+        return Diagnostic.Create(DependencyRoslynAnalyzerDiagnostics.ErrorInvalidRuleFile, location, error.Message);
     }
 
     private static Diagnostic ToDiagnostic(RuleConflict conflict, IReadOnlyList<AdditionalText> ruleFiles)
@@ -119,7 +119,7 @@ internal static class RoslynDependencyAnalyzerRuleFiles
             ? [ToLocation(conflict.SecondaryLocation, ruleFiles)]
             : [];
 
-        return Diagnostic.Create(RoslynDependencyAnalyzerDiagnostics.ErrorConflictingRules,
+        return Diagnostic.Create(DependencyRoslynAnalyzerDiagnostics.ErrorConflictingRules,
             primary,
             additional,
             null,

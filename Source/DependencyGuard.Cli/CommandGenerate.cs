@@ -56,7 +56,7 @@ internal static class CommandGenerate
         int errors = 0;
         foreach (IGrouping<string, Project> project in projects.GroupBy(p => p.FilePath!, StringComparer.OrdinalIgnoreCase))
         {
-            string outPath = Path.Combine(Path.GetDirectoryName(project.Key)!, RoslynDependencyAnalyzerContract.ConfigFileName);
+            string outPath = Path.Combine(Path.GetDirectoryName(project.Key)!, DependencyRoslynAnalyzerContract.ConfigFileName);
             if (!CanWrite(outPath, force, Path.GetFileNameWithoutExtension(project.Key)))
             {
                 errors++;
@@ -103,8 +103,8 @@ internal static class CommandGenerate
 
         foreach (Diagnostic diagnostic in analysis.Diagnostics.Where(d => d.Id == "DG0001"))
         {
-            if (diagnostic.Properties.TryGetValue(RoslynDependencyAnalyzerContract.SourceNamespaceProperty, out string? source) &&
-                diagnostic.Properties.TryGetValue(RoslynDependencyAnalyzerContract.TargetNamespaceProperty, out string? target) &&
+            if (diagnostic.Properties.TryGetValue(DependencyRoslynAnalyzerContract.SourceNamespaceProperty, out string? source) &&
+                diagnostic.Properties.TryGetValue(DependencyRoslynAnalyzerContract.TargetNamespaceProperty, out string? target) &&
                 source is not null && target is not null)
             {
                 builder.AddAllow(source, target);

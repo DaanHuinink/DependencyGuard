@@ -72,7 +72,7 @@ internal static class CommandCheck
         IReadOnlyList<AdditionalText> ruleFiles = ProjectsAnalysis.GetRuleFiles(project, configPaths);
         if (ruleFiles.Count == 0)
         {
-            Console.WriteLine($"[skip] {project.Name}: no {RoslynDependencyAnalyzerContract.ConfigFileName} found");
+            Console.WriteLine($"[skip] {project.Name}: no {DependencyRoslynAnalyzerContract.ConfigFileName} found");
             return (0, true);
         }
 

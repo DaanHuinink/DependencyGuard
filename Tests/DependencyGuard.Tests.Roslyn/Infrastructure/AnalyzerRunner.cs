@@ -47,7 +47,7 @@ internal static class AnalyzerRunner
     {
         IEnumerable<(string path, string text)> additionalFiles = yamlConfig is null
             ? []
-            : [(RoslynDependencyAnalyzerContract.ConfigFileName, yamlConfig)];
+            : [(DependencyRoslynAnalyzerContract.ConfigFileName, yamlConfig)];
 
         return GetDiagnosticsAsync(sources, additionalFiles, buildProperties ?? new Dictionary<string, string>());
     }
@@ -74,7 +74,7 @@ internal static class AnalyzerRunner
         Dictionary<string, string> globalOptions = buildProperties.ToDictionary(p => "build_property." + p.Key, p => p.Value);
 
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
-            [RoslynDependencyAnalyzerFactory.Create()],
+            [DependencyRoslynAnalyzerFactory.Create()],
             new AnalyzerOptions(additionalTexts, new AnalyzerConfigOptionsProviderInMemory(globalOptions)));
 
         return await compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync();

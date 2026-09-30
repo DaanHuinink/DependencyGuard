@@ -3,12 +3,12 @@ using Microsoft.CodeAnalysis;
 
 namespace DependencyGuard.Roslyn.Internal;
 
-internal static class RoslynDependencyAnalyzerDiagnostics
+internal static class DependencyRoslynAnalyzerDiagnostics
 {
     public static readonly DiagnosticDescriptor WarningConfigurationMissing = new(
         id: "DG0000",
         title: "DependencyGuard configuration not found",
-        messageFormat: $"No '{RoslynDependencyAnalyzerContract.ConfigFileName}' additional file found. " +
+        messageFormat: $"No '{DependencyRoslynAnalyzerContract.ConfigFileName}' additional file found. " +
                        "Add it to AdditionalFiles in your project file.",
         category: "Architecture",
         defaultSeverity: DiagnosticSeverity.Warning,

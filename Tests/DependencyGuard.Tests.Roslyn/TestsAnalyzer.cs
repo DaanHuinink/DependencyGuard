@@ -216,8 +216,8 @@ public sealed class TestsAnalyzer
 
         (string, string)[] additionalFiles =
         [
-            (RoslynDependencyAnalyzerContract.ConfigFileName, yaml),
-            (RoslynDependencyAnalyzerContract.ConfigFileName, yaml)
+            (DependencyRoslynAnalyzerContract.ConfigFileName, yaml),
+            (DependencyRoslynAnalyzerContract.ConfigFileName, yaml)
         ];
 
         // Act
@@ -1066,7 +1066,7 @@ public sealed class TestsAnalyzer
         // Assert
         Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0004", "DG0004" }));
         FileLinePositionSpan place = diagnostics[0].Location.GetLineSpan();
-        Assert.That(place.Path, Is.EqualTo(RoslynDependencyAnalyzerContract.ConfigFileName));
+        Assert.That(place.Path, Is.EqualTo(DependencyRoslynAnalyzerContract.ConfigFileName));
         Assert.That(place.StartLinePosition.Line, Is.EqualTo(1));
     }
 
@@ -1194,15 +1194,15 @@ public sealed class TestsAnalyzer
 
         // Assert
         Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
-        Assert.That(diagnostics[0].Properties[RoslynDependencyAnalyzerContract.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
-        Assert.That(diagnostics[0].Properties[RoslynDependencyAnalyzerContract.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
+        Assert.That(diagnostics[0].Properties[DependencyRoslynAnalyzerContract.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
+        Assert.That(diagnostics[0].Properties[DependencyRoslynAnalyzerContract.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
     }
 
     [Test]
     public void Analyzer_ShouldBeCreatedWithoutArguments_WhenRoslynLoadsItFromThePackage()
     {
         // Arrange
-        Type[] analyzers = typeof(RoslynDependencyAnalyzerFactory).Assembly
+        Type[] analyzers = typeof(DependencyRoslynAnalyzerFactory).Assembly
             .GetTypes()
             .Where(t => t.IsDefined(typeof(DiagnosticAnalyzerAttribute), inherit: false))
             .ToArray();

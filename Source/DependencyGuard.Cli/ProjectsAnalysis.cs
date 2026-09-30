@@ -15,10 +15,10 @@ internal static class ProjectsAnalysis
     public static IReadOnlyList<AdditionalText> GetRuleFiles(Project project, IReadOnlyList<string> configPaths)
     {
         List<AdditionalText> ruleFiles = project.AnalyzerOptions.AdditionalFiles
-            .Where(f => string.Equals(Path.GetFileName(f.Path), RoslynDependencyAnalyzerContract.ConfigFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(f => string.Equals(Path.GetFileName(f.Path), DependencyRoslynAnalyzerContract.ConfigFileName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        string projectFile = Path.Combine(Path.GetDirectoryName(project.FilePath)!, RoslynDependencyAnalyzerContract.ConfigFileName);
+        string projectFile = Path.Combine(Path.GetDirectoryName(project.FilePath)!, DependencyRoslynAnalyzerContract.ConfigFileName);
         if (ruleFiles.Count == 0 && File.Exists(projectFile))
         {
             ruleFiles.Add(new AdditionalTextFile(projectFile));
@@ -33,7 +33,7 @@ internal static class ProjectsAnalysis
 
     public static IReadOnlyList<AdditionalText> GetEmptyRuleFile(Project project)
     {
-        string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", RoslynDependencyAnalyzerContract.ConfigFileName);
+        string path = Path.Combine(Path.GetDirectoryName(project.FilePath)!, "generate", DependencyRoslynAnalyzerContract.ConfigFileName);
         return [new AdditionalTextFile(path, text: string.Empty)];
     }
 
@@ -49,7 +49,7 @@ internal static class ProjectsAnalysis
             [],
             new OptionsWithRootNamespace(project.AnalyzerOptions.AnalyzerConfigOptionsProvider, project.DefaultNamespace));
         ImmutableArray<Diagnostic> diagnostics = await compilation
-            .WithAnalyzers([RoslynDependencyAnalyzerFactory.Create(ruleFiles)], options)
+            .WithAnalyzers([DependencyRoslynAnalyzerFactory.Create(ruleFiles)], options)
             .GetAnalyzerDiagnosticsAsync();
 
         return new(diagnostics, compileErrors);

@@ -4,15 +4,15 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace DependencyGuard.Roslyn.Composition;
 
-public static class RoslynDependencyAnalyzerFactory
+public static class DependencyRoslynAnalyzerFactory
 {
     public static DiagnosticAnalyzer Create()
     {
-        return new RoslynDependencyAnalyzer();
+        return new DependencyRoslynAnalyzer();
     }
 
     public static DiagnosticAnalyzer Create(IReadOnlyList<AdditionalText> ruleFiles)
     {
-        return new RoslynDependencyAnalyzer(ruleFiles);
+        return new DependencyRoslynAnalyzer(ruleFiles);
     }
 }
