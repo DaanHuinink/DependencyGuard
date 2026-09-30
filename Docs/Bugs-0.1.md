@@ -1,4 +1,4 @@
-# Bugs in 0.1, and what 0.2.0-beta.5 does about them
+# Bugs in 0.1, and what 0.2.0-beta.6 does about them
 
 Found on 2026-09-28 and 29 while adding DependencyGuard to Quiz Night (a .NET 10 solution with Blazor components,
 `ImplicitUsings`, top-level statements and about 8,000 cross-namespace references), and while fixing what was found.

@@ -1,34 +1,33 @@
 using System.Collections.Immutable;
-using DependencyGuard.Roslyn.Internal;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace DependencyGuard.Roslyn.Composition;
+namespace DependencyGuard.Roslyn.Internal;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class RoslynAnalyzer : DiagnosticAnalyzer
+internal sealed class RoslynDependencyAnalyzer : DiagnosticAnalyzer
 {
     private const string RootNamespaceOption = "build_property.RootNamespace";
 
     private readonly IReadOnlyList<AdditionalText>? _ruleFiles;
 
-    public RoslynAnalyzer()
+    public RoslynDependencyAnalyzer()
     {
     }
 
-    public RoslynAnalyzer(IReadOnlyList<AdditionalText> ruleFiles)
+    public RoslynDependencyAnalyzer(IReadOnlyList<AdditionalText> ruleFiles)
     {
         _ruleFiles = ruleFiles;
     }
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
     [
-        RoslynAnalyzerDiagnostics.WarningDisallowedDependency,
-        RoslynAnalyzerDiagnostics.WarningConfigurationMissing,
-        RoslynAnalyzerDiagnostics.ErrorConflictingRules,
-        RoslynAnalyzerDiagnostics.ErrorInvalidRuleFile,
-        RoslynAnalyzerDiagnostics.ErrorUnhandledException
+        RoslynDependencyAnalyzerDiagnostics.WarningDisallowedDependency,
+        RoslynDependencyAnalyzerDiagnostics.WarningConfigurationMissing,
+        RoslynDependencyAnalyzerDiagnostics.ErrorConflictingRules,
+        RoslynDependencyAnalyzerDiagnostics.ErrorInvalidRuleFile,
+        RoslynDependencyAnalyzerDiagnostics.ErrorUnhandledException
     ];
 
     public override void Initialize(AnalysisContext context)
@@ -46,22 +45,22 @@ public sealed class RoslynAnalyzer : DiagnosticAnalyzer
         }
         catch (Exception exception)
         {
-            contextStart.RegisterCompilationEndAction(contextEnd =>
-                contextEnd.ReportDiagnostic(Diagnostic.Create(RoslynAnalyzerDiagnostics.ErrorUnhandledException, Location.None, exception)));
+            Diagnostic problem = Diagnostic.Create(RoslynDependencyAnalyzerDiagnostics.ErrorUnhandledException, Location.None, exception);
+            contextStart.RegisterCompilationEndAction(contextEnd => contextEnd.ReportDiagnostic(problem));
         }
     }
 
     private void RegisterAnalyzer(CompilationStartAnalysisContext contextStart)
     {
-        IReadOnlyList<AdditionalText> ruleFiles = _ruleFiles ?? RoslynAnalyzerRuleFiles.Find(contextStart.Options.AdditionalFiles);
-        RoslynAnalyzerRules rules = RoslynAnalyzerRuleFiles.Read(ruleFiles);
+        IReadOnlyList<AdditionalText> ruleFiles = _ruleFiles ?? RoslynDependencyAnalyzerRuleFiles.Find(contextStart.Options.AdditionalFiles);
+        RoslynDependencyAnalyzerRules rules = RoslynDependencyAnalyzerRuleFiles.Read(ruleFiles);
         if (rules.Analyzer is null)
         {
             contextStart.RegisterCompilationEndAction(contextEnd => ReportProblems(contextEnd, rules.Problems));
             return;
         }
 
-        RoslynAnalyzerCompilation compilation = new(
+        RoslynDependencyAnalyzerCompilation compilation = new(
             rules.Analyzer,
             ruleFiles,
             GetRootNamespace(contextStart),

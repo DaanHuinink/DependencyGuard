@@ -32,7 +32,6 @@ internal sealed class DependencyAnalyzer(DependencyRuleSet ruleSet) : IDependenc
             : new(false, $"Dependency from '{source}' to '{target}' is explicitly denied.", rule.SourceLocation);
     }
 
-
     private static bool NamespaceMatches(string subject, string pattern)
     {
         // .* means matches everything.

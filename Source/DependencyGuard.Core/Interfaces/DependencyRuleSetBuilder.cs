@@ -18,12 +18,12 @@ public sealed class DependencyRuleSetBuilder
 
     public DependencyRuleSet Build()
     {
-        List<DependencyRule> rules = _rules
+        DependencyRule[] rules = _rules
             .OrderBy(r => r.From, StringComparer.Ordinal)
             .ThenBy(r => r.To, StringComparer.Ordinal)
             .ThenBy(r => r.Action)
             .Select(r => new DependencyRule(r.From, r.To, r.Action))
-            .ToList();
+            .ToArray();
 
         return new(rules);
     }

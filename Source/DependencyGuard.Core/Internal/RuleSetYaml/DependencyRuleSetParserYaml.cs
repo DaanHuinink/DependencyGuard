@@ -20,7 +20,7 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
         }
 
         YamlMappingNode root = GetRoot(sourcePath, stream);
-        List<DependencyRule> rules = ParseRules(sourcePath, root);
+        IReadOnlyList<DependencyRule> rules = ParseRules(sourcePath, root);
         return new(rules);
     }
 
@@ -58,7 +58,7 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
         return stream;
     }
 
-    private static List<DependencyRule> ParseRules(string? sourcePath, YamlMappingNode root)
+    private static IReadOnlyList<DependencyRule> ParseRules(string? sourcePath, YamlMappingNode root)
     {
         List<DependencyRule> rules = [];
         List<RuleSetError> errors = [];
@@ -119,9 +119,13 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
         RuleSetParseResultYaml[] results = entries.Children
             .Select(item => ParseRuleEntry(item, action, sourcePath))
             .ToArray();
-        return new(
-            results.SelectMany(result => result.Rules).ToArray(),
-            results.SelectMany(result => result.Errors).ToArray());
+        DependencyRule[] rules = results
+            .SelectMany(result => result.Rules)
+            .ToArray();
+        RuleSetError[] errors = results
+            .SelectMany(result => result.Errors)
+            .ToArray();
+        return new(rules, errors);
     }
 
     private static RuleSetParseResultYaml ParseRuleEntry(YamlNode item, DependencyAction action, string? sourcePath)
@@ -203,7 +207,8 @@ internal sealed class DependencyRuleSetParserYaml : IDependencyRuleSetParser
         string name = pattern.EndsWith(".*", StringComparison.Ordinal)
             ? pattern.Substring(0, pattern.Length - 2)
             : pattern;
-        return name.Length > 0 && name.Split('.').All(IsIdentifier);
+        string[] segments = name.Split('.');
+        return name.Length > 0 && segments.All(IsIdentifier);
     }
 
     private static bool IsIdentifier(string segment)

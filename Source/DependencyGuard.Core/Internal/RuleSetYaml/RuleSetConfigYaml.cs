@@ -2,8 +2,8 @@ namespace DependencyGuard.Core.Internal.RuleSetYaml;
 
 internal sealed class RuleSetConfigYaml
 {
-    public List<RuleEntryYaml>? Allowed { get; set; }
-    public List<RuleEntryYaml>? Denied { get; set; }
+    public RuleEntryYaml[] Allowed { get; set; } = [];
+    public RuleEntryYaml[] Denied { get; set; } = [];
 }
 
 internal sealed class RuleEntryYaml

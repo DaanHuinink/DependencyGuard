@@ -19,7 +19,10 @@ internal sealed class RuleSetValidator
     {
         foreach (IGrouping<(string, string), DependencyRule> group in ruleSet.Rules
             .GroupBy(r => (r.FromNamespace, r.ToNamespace))
-            .Where(g => g.Select(r => r.Action).Distinct().Count() > 1))
+            .Where(g => g
+                .Select(r => r.Action)
+                .Distinct()
+                .Count() > 1))
         {
             DependencyRule allow = group.First(r => r.Action == DependencyAction.Allow);
             DependencyRule deny = group.First(r => r.Action == DependencyAction.Deny);
@@ -33,8 +36,12 @@ internal sealed class RuleSetValidator
         // Rules are ranked by TO length first, then FROM length. When an allow and a deny
         // have "crossed" specificity (one is more specific in FROM, the other in TO), the
         // TO-wins ordering produces unintuitive results for the intersection of their ranges.
-        DependencyRule[] allows = ruleSet.Rules.Where(r => r.Action == DependencyAction.Allow).ToArray();
-        DependencyRule[] denies = ruleSet.Rules.Where(r => r.Action == DependencyAction.Deny).ToArray();
+        DependencyRule[] allows = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Allow)
+            .ToArray();
+        DependencyRule[] denies = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Deny)
+            .ToArray();
 
         foreach (DependencyRule allow in allows)
         {
@@ -81,8 +88,12 @@ internal sealed class RuleSetValidator
         // namespaces themselves (e.g. `System` and `System.*` both match `System`) and tie on
         // specificity, so declaration order would silently decide which one wins.
         // Identical (from, to) pairs are already reported by ValidateExactRuleConflicts.
-        DependencyRule[] allows = ruleSet.Rules.Where(r => r.Action == DependencyAction.Allow).ToArray();
-        DependencyRule[] denies = ruleSet.Rules.Where(r => r.Action == DependencyAction.Deny).ToArray();
+        DependencyRule[] allows = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Allow)
+            .ToArray();
+        DependencyRule[] denies = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Deny)
+            .ToArray();
 
         foreach (DependencyRule allow in allows)
         {

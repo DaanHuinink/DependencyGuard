@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace DependencyGuard.Roslyn.Internal;
 
-internal sealed class RoslynAnalyzerCompilation
+internal sealed class RoslynDependencyAnalyzerCompilation
 {
     private readonly IDependencyAnalyzer _analyzer;
     private readonly IReadOnlyList<AdditionalText> _configFiles;
@@ -18,7 +18,7 @@ internal sealed class RoslynAnalyzerCompilation
     private readonly IAssemblySymbol _assembly;
     private readonly ConcurrentDictionary<string, bool> _reportedMappedUsings = new(StringComparer.Ordinal);
 
-    public RoslynAnalyzerCompilation(
+    public RoslynDependencyAnalyzerCompilation(
         IDependencyAnalyzer analyzer,
         IReadOnlyList<AdditionalText> configFiles,
         string rootNamespace,
@@ -284,13 +284,18 @@ internal sealed class RoslynAnalyzerCompilation
         }
 
         Location[] ruleLocations = result.RuleLocation is not null
-            ? [RoslynAnalyzerRuleFiles.ToLocation(result.RuleLocation, _configFiles)]
+            ? [RoslynDependencyAnalyzerRuleFiles.ToLocation(result.RuleLocation, _configFiles)]
             : [];
 
         ImmutableDictionary<string, string?> properties = ImmutableDictionary<string, string?>.Empty
-            .Add(RoslynAnalyzerContract.SourceNamespaceProperty, sourceNamespace)
-            .Add(RoslynAnalyzerContract.TargetNamespaceProperty, targetNamespace);
+            .Add(RoslynDependencyAnalyzerContract.SourceNamespaceProperty, sourceNamespace)
+            .Add(RoslynDependencyAnalyzerContract.TargetNamespaceProperty, targetNamespace);
 
-        report(Diagnostic.Create(RoslynAnalyzerDiagnostics.WarningDisallowedDependency, location, ruleLocations, properties, result.Reason));
+        report(Diagnostic.Create(
+            RoslynDependencyAnalyzerDiagnostics.WarningDisallowedDependency,
+            location,
+            ruleLocations,
+            properties,
+            result.Reason));
     }
 }

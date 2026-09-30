@@ -21,14 +21,14 @@ internal sealed class ProjectsLoader : IDisposable
 
     public async Task<(IReadOnlyList<Project> Projects, string? Error)> LoadAsync(string targetPath, bool restore)
     {
-        if (!TryResolveTarget(targetPath, out string? solutionPath, out List<string> projectPaths, out string? error))
+        if (!TryResolveTarget(targetPath, out string? solutionPath, out string[] projectPaths, out string? error))
         {
             return ([], error);
         }
 
         if (restore)
         {
-            List<string> restorePaths = solutionPath is null
+            string[] restorePaths = solutionPath is null
                 ? projectPaths
                 : [solutionPath];
             foreach (string path in restorePaths)
@@ -44,7 +44,10 @@ internal sealed class ProjectsLoader : IDisposable
         if (solutionPath is not null)
         {
             Solution solution = await _workspace.OpenSolutionAsync(solutionPath);
-            return (solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList(), null);
+            Project[] solutionProjects = solution.Projects
+                .Where(p => p.Language == LanguageNames.CSharp)
+                .ToArray();
+            return (solutionProjects, null);
         }
 
         List<Project> projects = [];
@@ -67,7 +70,7 @@ internal sealed class ProjectsLoader : IDisposable
         _workspace.Dispose();
     }
 
-    private static bool TryResolveTarget(string targetPath, out string? solutionPath, out List<string> projectPaths, out string? error)
+    private static bool TryResolveTarget(string targetPath, out string? solutionPath, out string[] projectPaths, out string? error)
     {
         solutionPath = null;
         projectPaths = [];
@@ -75,15 +78,13 @@ internal sealed class ProjectsLoader : IDisposable
 
         if (Directory.Exists(targetPath))
         {
-            projectPaths = Directory
-                .GetFiles(targetPath, "*.csproj", SearchOption.TopDirectoryOnly)
-                .ToList();
-            if (projectPaths.Count == 0)
+            projectPaths = Directory.GetFiles(targetPath, "*.csproj", SearchOption.TopDirectoryOnly);
+            if (projectPaths.Length == 0)
             {
                 error = $"No .csproj found in: {targetPath}";
             }
 
-            return projectPaths.Count > 0;
+            return projectPaths.Length > 0;
         }
 
         if (!File.Exists(targetPath))

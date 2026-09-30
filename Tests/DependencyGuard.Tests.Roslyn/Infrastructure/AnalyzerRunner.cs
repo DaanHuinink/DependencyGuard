@@ -1,5 +1,5 @@
-using DependencyGuard.Roslyn.Composition;
 using System.Collections.Immutable;
+using DependencyGuard.Roslyn.Composition;
 using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -27,7 +27,10 @@ internal static class AnalyzerRunner
         string[] sources,
         string? yamlConfig)
     {
-        return GetDiagnosticsAsync(sources.Select(s => (string.Empty, s)).ToArray(), yamlConfig);
+        (string path, string text)[] files = sources
+            .Select(s => (string.Empty, s))
+            .ToArray();
+        return GetDiagnosticsAsync(files, yamlConfig);
     }
 
     internal static Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
@@ -44,7 +47,7 @@ internal static class AnalyzerRunner
     {
         IEnumerable<(string path, string text)> additionalFiles = yamlConfig is null
             ? []
-            : [(RoslynAnalyzerContract.ConfigFileName, yamlConfig)];
+            : [(RoslynDependencyAnalyzerContract.ConfigFileName, yamlConfig)];
 
         return GetDiagnosticsAsync(sources, additionalFiles, buildProperties ?? new Dictionary<string, string>());
     }
@@ -64,15 +67,14 @@ internal static class AnalyzerRunner
             FrameworkReferences.Value,
             new(OutputKind.DynamicallyLinkedLibrary));
 
-        ImmutableArray<AdditionalText> additionalTexts =
-        [
-            ..additionalFiles.Select(AdditionalText (f) => new AdditionalTextInMemory(f.path, f.text))
-        ];
+        ImmutableArray<AdditionalText> additionalTexts = additionalFiles
+            .Select(AdditionalText (f) => new AdditionalTextInMemory(f.path, f.text))
+            .ToImmutableArray();
 
         Dictionary<string, string> globalOptions = buildProperties.ToDictionary(p => "build_property." + p.Key, p => p.Value);
 
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
-            [new RoslynAnalyzer()],
+            [RoslynDependencyAnalyzerFactory.Create()],
             new AnalyzerOptions(additionalTexts, new AnalyzerConfigOptionsProviderInMemory(globalOptions)));
 
         return await compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync();

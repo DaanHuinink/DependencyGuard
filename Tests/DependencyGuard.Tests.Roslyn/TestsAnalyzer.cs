@@ -1,7 +1,9 @@
-using DependencyGuard.Roslyn.Interfaces;
 using System.Collections.Immutable;
+using DependencyGuard.Roslyn.Composition;
+using DependencyGuard.Roslyn.Interfaces;
 using DependencyGuard.Tests.Roslyn.Infrastructure;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using NUnit.Framework;
 
@@ -214,8 +216,8 @@ public sealed class TestsAnalyzer
 
         (string, string)[] additionalFiles =
         [
-            (RoslynAnalyzerContract.ConfigFileName, yaml),
-            (RoslynAnalyzerContract.ConfigFileName, yaml)
+            (RoslynDependencyAnalyzerContract.ConfigFileName, yaml),
+            (RoslynDependencyAnalyzerContract.ConfigFileName, yaml)
         ];
 
         // Act
@@ -623,7 +625,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(SourceAt(diagnostics[0], source), Is.EqualTo("Repository"));
         Assert.That(diagnostics[0].GetMessage(), Does.Contain("'MyApp.Infrastructure'"));
     }
@@ -648,7 +650,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(SourceAt(diagnostics[0], source), Is.EqualTo("Store"));
     }
 
@@ -672,7 +674,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(SourceAt(diagnostics[0], source), Is.EqualTo("Format"));
     }
 
@@ -696,7 +698,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(SourceAt(diagnostics[0], source), Is.EqualTo("Shout"));
     }
 
@@ -729,7 +731,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(diagnostics[0].GetMessage(), Does.Contain("'MyApp.Application.Orders' to depend on 'MyApp.Application'"));
     }
 
@@ -795,7 +797,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], yaml);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(SourceAt(diagnostics[0], source), Is.EqualTo("var"));
         Assert.That(diagnostics[0].GetMessage(), Does.Contain("'MyApp.Infrastructure'"));
     }
@@ -858,7 +860,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
         Assert.That(diagnostics[0].GetMessage(), Does.Contain("'MyApp.Application' to depend on"));
     }
 
@@ -899,7 +901,7 @@ public sealed class TestsAnalyzer
             properties);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001", "DG0001", "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001", "DG0001", "DG0001" }));
         Assert.That(diagnostics.Select(d => d.GetMessage()), Has.All.Contains("'MyApp.Web' to depend on 'MyApp.Infrastructure'"));
     }
 
@@ -918,7 +920,7 @@ public sealed class TestsAnalyzer
 
         // Assert
         Assert.That(
-            diagnostics.Select(d => d.GetMessage()).ToArray(),
+            diagnostics.Select(d => d.GetMessage()),
             Is.EqualTo(new[] { "No rule allows 'TestProject' to depend on 'MyApp.Infrastructure'." }));
     }
 
@@ -948,7 +950,7 @@ public sealed class TestsAnalyzer
 
         // Assert
         Assert.That(
-            diagnostics.Select(d => d.GetMessage()).ToArray(),
+            diagnostics.Select(d => d.GetMessage()),
             Is.EqualTo(new[] { "No rule allows 'MyApp.Application' to depend on 'MyApp.Web'." }));
     }
 
@@ -1015,7 +1017,7 @@ public sealed class TestsAnalyzer
             AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
     }
 
     [Test]
@@ -1062,9 +1064,9 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], yaml);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0004", "DG0004" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0004", "DG0004" }));
         FileLinePositionSpan place = diagnostics[0].Location.GetLineSpan();
-        Assert.That(place.Path, Is.EqualTo(RoslynAnalyzerContract.ConfigFileName));
+        Assert.That(place.Path, Is.EqualTo(RoslynDependencyAnalyzerContract.ConfigFileName));
         Assert.That(place.StartLinePosition.Line, Is.EqualTo(1));
     }
 
@@ -1089,7 +1091,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0003" }));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0003" }));
         Assert.That(diagnostics[0].Location.GetLineSpan().StartLinePosition.Line, Is.EqualTo(1));
         Assert.That(diagnostics[0].AdditionalLocations[0].GetLineSpan().StartLinePosition.Line, Is.EqualTo(4));
     }
@@ -1131,7 +1133,7 @@ public sealed class TestsAnalyzer
 
         // Assert
         Assert.That(
-            diagnostics.Select(d => d.GetMessage()).ToArray(),
+            diagnostics.Select(d => d.GetMessage()),
             Is.EqualTo(new[] { "No rule allows 'MyApp.Web' to depend on 'MyApp.Infrastructure'." }));
     }
 
@@ -1173,7 +1175,7 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync(source, yaml);
 
         // Assert
-        Assert.That(diagnostics.Select(d => SourceAt(d, source)).ToArray(), Is.EqualTo(new[] { "var" }));
+        Assert.That(diagnostics.Select(d => SourceAt(d, source)), Is.EqualTo(new[] { "var" }));
     }
 
     [Test]
@@ -1191,8 +1193,27 @@ public sealed class TestsAnalyzer
         ImmutableArray<Diagnostic> diagnostics = await AnalyzerRunner.GetDiagnosticsAsync([source, Infrastructure], AllowAppToDomain);
 
         // Assert
-        Assert.That(diagnostics.Select(d => d.Id).ToArray(), Is.EqualTo(new[] { "DG0001" }));
-        Assert.That(diagnostics[0].Properties[RoslynAnalyzerContract.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
-        Assert.That(diagnostics[0].Properties[RoslynAnalyzerContract.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
+        Assert.That(diagnostics.Select(d => d.Id), Is.EqualTo(new[] { "DG0001" }));
+        Assert.That(diagnostics[0].Properties[RoslynDependencyAnalyzerContract.SourceNamespaceProperty], Is.EqualTo("MyApp.Application"));
+        Assert.That(diagnostics[0].Properties[RoslynDependencyAnalyzerContract.TargetNamespaceProperty], Is.EqualTo("MyApp.Infrastructure"));
+    }
+
+    [Test]
+    public void Analyzer_ShouldBeCreatedWithoutArguments_WhenRoslynLoadsItFromThePackage()
+    {
+        // Arrange
+        Type[] analyzers = typeof(RoslynDependencyAnalyzerFactory).Assembly
+            .GetTypes()
+            .Where(t => t.IsDefined(typeof(DiagnosticAnalyzerAttribute), inherit: false))
+            .ToArray();
+
+        // Act
+        object?[] created = analyzers
+            .Select(t => Activator.CreateInstance(t))
+            .ToArray();
+
+        // Assert
+        Assert.That(analyzers, Is.Not.Empty);
+        Assert.That(created, Is.All.InstanceOf<DiagnosticAnalyzer>());
     }
 }
