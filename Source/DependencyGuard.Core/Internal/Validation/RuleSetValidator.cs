@@ -6,16 +6,13 @@ internal sealed class RuleSetValidator
 {
     public IReadOnlyList<RuleConflict> Validate(DependencyRuleSet ruleSet)
     {
-        List<RuleConflict> conflicts = [];
-
-        ValidateExactRuleConflicts(ruleSet, conflicts);
-        ValidateCrossingSpecificityConflicts(ruleSet, conflicts);
-        ValidateEqualSpecificityConflicts(ruleSet, conflicts);
-
-        return conflicts;
+        return ValidateExactRuleConflicts(ruleSet)
+            .Concat(ValidateCrossingSpecificityConflicts(ruleSet))
+            .Concat(ValidateEqualSpecificityConflicts(ruleSet))
+            .ToArray();
     }
 
-    private static void ValidateExactRuleConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static IEnumerable<RuleConflict> ValidateExactRuleConflicts(DependencyRuleSet ruleSet)
     {
         foreach (IGrouping<(string, string), DependencyRule> group in ruleSet.Rules
             .GroupBy(r => (r.FromNamespace, r.ToNamespace))
@@ -27,11 +24,11 @@ internal sealed class RuleSetValidator
             DependencyRule allow = group.First(r => r.Action == DependencyAction.Allow);
             DependencyRule deny = group.First(r => r.Action == DependencyAction.Deny);
             string msg = $"Rule for '{group.Key.Item1}' → '{group.Key.Item2}' is declared as both allowed and denied.";
-            conflicts.Add(new(msg, allow.SourceLocation, deny.SourceLocation));
+            yield return new(msg, allow.SourceLocation, deny.SourceLocation);
         }
     }
 
-    private static void ValidateCrossingSpecificityConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static IEnumerable<RuleConflict> ValidateCrossingSpecificityConflicts(DependencyRuleSet ruleSet)
     {
         // Rules are ranked by TO length first, then FROM length. When an allow and a deny
         // have "crossed" specificity (one is more specific in FROM, the other in TO), the
@@ -54,13 +51,13 @@ internal sealed class RuleSetValidator
                 if (IsWildcardParentOf(deny.FromNamespace, allow.FromNamespace) &&
                     IsWildcardParentOf(allow.ToNamespace, deny.ToNamespace))
                 {
-                    conflicts.Add(new(
+                    yield return new(
                         $"Allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}') is overridden by " +
                         $"deny rule ('from: {deny.FromNamespace}, to: {deny.ToNamespace}'): for dependencies " +
                         $"from '{allow.FromNamespace}' to '{deny.ToNamespace}', the deny wins because its " +
                         $"target namespace is more specific, despite the allow having a more specific source.",
                         allow.SourceLocation,
-                        deny.SourceLocation));
+                        deny.SourceLocation);
                 }
 
                 // Case B: deny FROM is more specific (child of allow FROM),
@@ -70,19 +67,19 @@ internal sealed class RuleSetValidator
                 if (IsWildcardParentOf(allow.FromNamespace, deny.FromNamespace) &&
                     IsWildcardParentOf(deny.ToNamespace, allow.ToNamespace))
                 {
-                    conflicts.Add(new(
+                    yield return new(
                         $"Deny rule ('from: {deny.FromNamespace}, to: {deny.ToNamespace}') is overridden by " +
                         $"allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}'): for dependencies " +
                         $"from '{deny.FromNamespace}' to '{allow.ToNamespace}', the allow wins because its " +
                         $"target namespace is more specific, despite the deny having a more specific source.",
                         deny.SourceLocation,
-                        allow.SourceLocation));
+                        allow.SourceLocation);
                 }
             }
         }
     }
 
-    private static void ValidateEqualSpecificityConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static IEnumerable<RuleConflict> ValidateEqualSpecificityConflicts(DependencyRuleSet ruleSet)
     {
         // An allow and a deny whose FROM and TO pattern bases are identical both match the base
         // namespaces themselves (e.g. `System` and `System.*` both match `System`) and tie on
@@ -109,13 +106,13 @@ internal sealed class RuleSetValidator
                     continue;
                 }
 
-                conflicts.Add(new(
+                yield return new(
                     $"Allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}') and deny rule " +
                     $"('from: {deny.FromNamespace}, to: {deny.ToNamespace}') are equally specific: for dependencies " +
                     $"from '{GetPatternBase(allow.FromNamespace)}' to '{GetPatternBase(allow.ToNamespace)}', " +
                     $"declaration order would decide which one wins.",
                     allow.SourceLocation,
-                    deny.SourceLocation));
+                    deny.SourceLocation);
             }
         }
     }

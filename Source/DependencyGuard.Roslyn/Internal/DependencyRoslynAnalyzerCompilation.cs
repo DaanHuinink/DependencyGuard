@@ -98,9 +98,9 @@ internal sealed class DependencyRoslynAnalyzerCompilation
 
         if (name is IdentifierNameSyntax { IsVar: true } && symbol is ITypeSymbol inferred)
         {
-            HashSet<INamedTypeSymbol> inferredTypes = new(SymbolEqualityComparer.Default);
-            CollectNamedTypes(inferred, inferredTypes);
-            return inferredTypes.ToArray();
+            return GetNamedTypes(inferred)
+                .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+                .ToArray();
         }
 
         if (IsQualifiedByType(name, model))
@@ -172,39 +172,23 @@ internal sealed class DependencyRoslynAnalyzerCompilation
         return false;
     }
 
-    private static void CollectNamedTypes(ITypeSymbol? type, HashSet<INamedTypeSymbol> result)
+    private static IEnumerable<INamedTypeSymbol> GetNamedTypes(ITypeSymbol? type)
     {
-        while (true)
+        switch (type)
         {
-            switch (type)
-            {
-                case IArrayTypeSymbol array:
-                {
-                    type = array.ElementType;
-                    continue;
-                }
+            case IArrayTypeSymbol array:
+                return GetNamedTypes(array.ElementType);
 
-                case IPointerTypeSymbol pointer:
-                {
-                    type = pointer.PointedAtType;
-                    continue;
-                }
+            case IPointerTypeSymbol pointer:
+                return GetNamedTypes(pointer.PointedAtType);
 
-                case INamedTypeSymbol named when named.TypeKind != TypeKind.Error && !named.IsAnonymousType:
-                {
-                    if (result.Add(named))
-                    {
-                        foreach (ITypeSymbol typeArgument in named.TypeArguments)
-                        {
-                            CollectNamedTypes(typeArgument, result);
-                        }
-                    }
+            case INamedTypeSymbol named when named.TypeKind != TypeKind.Error && !named.IsAnonymousType:
+                return named.TypeArguments
+                    .SelectMany(GetNamedTypes)
+                    .Prepend(named);
 
-                    return;
-                }
-            }
-
-            break;
+            default:
+                return [];
         }
     }
 

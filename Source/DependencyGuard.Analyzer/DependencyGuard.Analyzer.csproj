@@ -5,7 +5,7 @@
     <LangVersion>latest</LangVersion>
 
     <PackageId>DependencyGuard.Analyzer</PackageId>
-    <Version>0.2.0-beta.6</Version>
+    <Version>0.2.0-beta.7</Version>
     <Authors>Daan Huinink</Authors>
     <Description>
       A Roslyn analyzer that enforces namespace-level dependency rules in C# projects.
