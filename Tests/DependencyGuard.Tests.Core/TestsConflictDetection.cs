@@ -1,3 +1,4 @@
+using DependencyGuard.Core.Composition;
 using DependencyGuard.Core.Interfaces;
 using NUnit.Framework;
 
@@ -88,8 +89,8 @@ public sealed class TestsConflictDetection
         // silently overriding the allow that was written for the narrower source.
         DependencyRuleSet ruleSet = new(
         [
-            new("MyApp.Application", "MyApp.Infrastructure", DependencyAction.Allow),
-            new("MyApp", "MyApp.Infrastructure.Database", DependencyAction.Deny)
+            new("MyApp.Application", "MyApp.Infrastructure.*", DependencyAction.Allow),
+            new("MyApp.*", "MyApp.Infrastructure.Database", DependencyAction.Deny)
         ]);
 
         // Act
@@ -111,8 +112,8 @@ public sealed class TestsConflictDetection
         // silently overriding the deny that was written for the narrower source.
         DependencyRuleSet ruleSet = new(
         [
-            new("MyApp.Application", "MyApp.Infrastructure", DependencyAction.Deny),
-            new("MyApp", "MyApp.Infrastructure.PublicApi", DependencyAction.Allow)
+            new("MyApp.Application", "MyApp.Infrastructure.*", DependencyAction.Deny),
+            new("MyApp.*", "MyApp.Infrastructure.PublicApi", DependencyAction.Allow)
         ]);
 
         // Act
@@ -186,59 +187,6 @@ public sealed class TestsConflictDetection
     }
 
     [Test]
-    public void TryCreateAnalyzer_ShouldReportConflict_WhenExposedToNamespaceIsDuplicated()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-            [],
-            [
-                new ExposedToRule("MyApp.Infra", ["MyApp.Application"]),
-                new ExposedToRule("MyApp.Infra", ["MyApp.Worker"])
-            ]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
-
-        // Assert
-        Assert.That(conflicts, Has.Count.EqualTo(1));
-        Assert.That(conflicts[0].Message, Does.Contain("MyApp.Infra"));
-    }
-
-    [Test]
-    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExposedToNamespacesDiffer()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-            [],
-            [
-                new ExposedToRule("MyApp.Infra.Database", ["MyApp.Application"]),
-                new ExposedToRule("MyApp.Infra.Messaging", ["MyApp.Worker"])
-            ]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out IDependencyAnalyzer? analyzer);
-
-        // Assert
-        Assert.That(analyzer, Is.Not.Null);
-        Assert.That(conflicts, Is.Empty);
-    }
-
-    [Test]
-    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenSingleExposedToEntryListsMultipleConsumers()
-    {
-        // Arrange
-        DependencyRuleSet ruleSet = new(
-            [],
-            [new ExposedToRule("MyApp.Infra", ["MyApp.Application", "MyApp.Worker"])]);
-
-        // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
-
-        // Assert
-        Assert.That(conflicts, Is.Empty);
-    }
-
-    [Test]
     public void TryCreateAnalyzer_ShouldReportEveryConflict_WhenMultiplePairsConflict()
     {
         // Arrange
@@ -276,22 +224,74 @@ public sealed class TestsConflictDetection
     }
 
     [Test]
-    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExposedToAndDependencyRulesAreCompatible()
+    public void TryCreateAnalyzer_ShouldReportConflict_WhenCrossingAllowComesFromEveryNamespace()
     {
         // Arrange
         DependencyRuleSet ruleSet = new(
         [
-            new("MyApp.Application", "MyApp.Domain", DependencyAction.Allow)
-        ],
-        [
-            new ExposedToRule("MyApp.Domain.Shared", ["MyApp.Domain.Orders", "MyApp.Domain.Customers"])
+            new(".*", "System.IO.*", DependencyAction.Allow),
+            new("MyApp.*", "System.*", DependencyAction.Deny)
         ]);
 
         // Act
-        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out IDependencyAnalyzer? analyzer);
+        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
 
         // Assert
-        Assert.That(analyzer, Is.Not.Null);
+        Assert.That(conflicts, Has.Count.EqualTo(1));
+        Assert.That(conflicts[0].Message, Does.Contain("despite the deny having a more specific source"));
+    }
+
+    [Test]
+    public void TryCreateAnalyzer_ShouldReportConflict_WhenCrossingDenyComesFromEveryNamespace()
+    {
+        // Arrange
+        DependencyRuleSet ruleSet = new(
+        [
+            new("MyApp.*", "System.*", DependencyAction.Allow),
+            new(".*", "System.IO.*", DependencyAction.Deny)
+        ]);
+
+        // Act
+        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
+
+        // Assert
+        Assert.That(conflicts, Has.Count.EqualTo(1));
+        Assert.That(conflicts[0].Message, Does.Contain("despite the allow having a more specific source"));
+    }
+
+    [Test]
+    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenDenyCarvesOutOfAnAllowForEveryNamespace()
+    {
+        // Arrange
+        DependencyRuleSet ruleSet = new(
+        [
+            new(".*", "System.*", DependencyAction.Allow),
+            new("MyApp.Core.*", "System.IO.*", DependencyAction.Deny)
+        ]);
+
+        // Act
+        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
+
+        // Assert
+        Assert.That(conflicts, Is.Empty);
+    }
+
+    [TestCase("Services", "System", ".*", "System.IO.*")]
+    [TestCase("MyApp.Application", "MyApp.Infrastructure", "MyApp", "MyApp.Infrastructure.Database")]
+    public void TryCreateAnalyzer_ShouldReturnNoConflicts_WhenExactPatternsCannotMeet(
+        string allowFrom, string allowTo, string denyFrom, string denyTo)
+    {
+        // Arrange
+        DependencyRuleSet ruleSet = new(
+        [
+            new(allowFrom, allowTo, DependencyAction.Allow),
+            new(denyFrom, denyTo, DependencyAction.Deny)
+        ]);
+
+        // Act
+        IReadOnlyList<RuleConflict> conflicts = DependencyGuardFactory.TryCreateAnalyzer([ruleSet], out _);
+
+        // Assert
         Assert.That(conflicts, Is.Empty);
     }
 }

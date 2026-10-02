@@ -7,7 +7,7 @@ Namespace-level architecture rules for C#.
 - Dependency rules between namespaces, in a simple YAML file
 - **Nothing is allowed by default:** every dependency needs a rule
 - Violations show up as warnings in the IDE and the build, at the offending line
-- `allowed`, `denied` and `exposedTo` rules with wildcards
+- `allowed` and `denied` rules with wildcards
 - A config per project, one for the whole solution, or both
 - CLI tool for CI, with `generate` to create a starting config from existing code
 - No attributes, no base classes, no runtime cost
@@ -30,7 +30,7 @@ namespace MyApp.Domain;
 ## Requirements
 
 - **Analyzer:** .NET SDK 9.0.200 or later.
-- **CLI tool:** .NET 8 runtime
+- **CLI tool:** .NET 10 SDK
 - **Building from source:** .NET 10 SDK
 
 ## Roslyn analyzer
@@ -38,7 +38,7 @@ namespace MyApp.Domain;
 1. Add the package:
 
    ```xml
-   <PackageReference Include="DependencyGuard.Analyzer" Version="0.1.0" PrivateAssets="all" />
+   <PackageReference Include="DependencyGuard.Analyzer" Version="0.2.0-beta.7" PrivateAssets="all" />
    ```
 
 2. Add a `dependency-guard.yaml` to the project directory. It is picked up automatically.
@@ -50,8 +50,7 @@ namespace MyApp.Domain;
 - `from`: the namespace that has the dependency. `to`: the namespace it depends on.
 - Checked in this order:
   1. `allowed` / `denied` rules. The most specific `to` wins, then the most specific `from`.
-  2. `exposedTo`
-  3. Nothing matched: denied.
+  2. Nothing matched: denied.
 
 ### Patterns
 
@@ -86,27 +85,13 @@ denied:
       to: MyApp.Orders.*
   ```
 
-### exposedTo
-
-```yaml
-exposedTo:
-  - namespace: MyApp.Infrastructure.*
-    consumers:
-      - MyApp.Application.*
-      - MyApp.Worker.*
-```
-
-- Limits who may use a namespace. Everyone else is denied.
-- Listed consumers need no separate `allowed` rule.
-- An `allowed` rule wins over `exposedTo`.
-- One entry per namespace. Duplicates are a DG0003 conflict.
-
 ### What is checked
 
-- `using` directives
-- Fully-qualified type references
+- Every name that refers to a type in another namespace, however it came into scope
 - Inferred types of `var`
-- **Not** checked: global, static and alias usings. So `ImplicitUsings` needs no rules.
+- `using` directives
+- Code without a namespace belongs to the project's root namespace
+- `ImplicitUsings` brings in namespaces too. Allow them with `from: .*` and `to: System.*`
 
 ### Multiple config files
 
@@ -121,7 +106,6 @@ exposedTo:
 - All files are merged into one rule set. Conflicts between files are DG0003.
 - Every file must be named `dependency-guard.yaml`.
 - To share one file instead of a file per project, set `DependencyGuardConfigPath` ([example](Demo/SharedConfig/README.md)).
-- The CLI ignores these MSBuild settings.
 
 ## Architectural patterns
 
@@ -199,7 +183,6 @@ dependency-guard check MySolution.slnx      # report violations
 ```
 
 - Checks projects without building them. Handy in CI.
-- Syntax only: it skips `var` inference and reads `Outer.Inner` as namespace `Outer`.
 
 ### generate
 
@@ -209,7 +192,7 @@ dependency-guard generate [--output <path>] [--force] [<target>]
 
 - Writes a `dependency-guard.yaml` per project that allows every dependency it has today.
 - Then remove the rules for the dependencies you don't want.
-- `--output`, `-o`: write to this path (single project)
+- `--output`, `-o`: write one file for all projects
 - `--force`: overwrite an existing file
 - Exit codes: `0` written, `2` failed or usage error
 
@@ -221,7 +204,7 @@ dependency-guard [check] [--config <path>] [<target>]
 
 - `check` is the default, so `dependency-guard <target>` works too.
 - `<target>`: a `.csproj`, `.sln` or `.slnx` file, or a directory. Default: the current directory.
-- `--config`, `-c`: use this config for every project.
+- `--config`, `-c`: add this config to every project's own.
 - Projects without a config are skipped.
 - Exit codes: `0` no violations, `1` violations or an invalid config, `2` usage error
 

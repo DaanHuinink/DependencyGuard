@@ -1,17 +1,38 @@
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
+using System.Reflection;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DependencyGuard.Cli;
 
-internal static partial class Program
+internal static class Program
 {
-    private static int Main(string[] args)
+    private const string Usage = """
+        Usage:
+          dependency-guard [check] [--config <file>]... [--no-restore] [<target>]
+          dependency-guard generate [--output <file>] [--force] [--no-restore] [<target>]
+
+        <target>  A .csproj, .sln or .slnx file, or a folder with a .csproj. Default: the current folder.
+
+        check     Checks every project against its rule files and the --config files.
+                  Exit codes: 0 no violations, 1 violations or an invalid rule file, 2 usage error.
+        generate  Writes a dependency-guard.yaml per project that allows every dependency the code has today,
+                  or one for all projects with --output. Exit codes: 0 written, 2 failed or usage error.
+
+        Options:
+          -c, --config <file>  A rule file for every project, on top of the project's own. May be repeated.
+          -o, --output <file>  Write one rule file for all projects.
+              --force          Overwrite an existing rule file.
+              --no-restore     Skip 'dotnet restore'.
+          -h, --help           Show this help.
+              --version        Show the version.
+
+        Needs the .NET 10 SDK.
+        """;
+
+    private static async Task<int> Main(string[] args)
     {
         try
         {
-            return RunMain(args);
+            return await RunMainAsync(args);
         }
         catch (Exception ex)
         {
@@ -20,16 +41,61 @@ internal static partial class Program
         }
     }
 
-    private static int RunMain(string[] args)
+    private static Task<int> RunMainAsync(string[] args)
     {
+        if (args.Any(a => a is "--help" or "-h" or "-?" or "/?"))
+        {
+            Console.WriteLine($"DependencyGuard {GetVersion()}: namespace dependency rules for C#.");
+            Console.WriteLine();
+            Console.WriteLine(Usage);
+            return Task.FromResult(0);
+        }
+
+        if (args.Any(a => a == "--version"))
+        {
+            Console.WriteLine(GetVersion());
+            return Task.FromResult(0);
+        }
+
         if (args.Length > 0 && args[0] == "generate")
         {
-            return CommandGenerate.Run(args[1..]);
+            return CommandGenerate.RunAsync(args[1..]);
         }
 
         // "check" subcommand or bare invocation (backward compat)
         string[] checkArgs = args.Length > 0 && args[0] == "check" ? args[1..] : args;
-        return CommandCheck.Run(checkArgs);
+        return CommandCheck.RunAsync(checkArgs);
+    }
+
+    internal static int UsageError(string message)
+    {
+        PrintError(message);
+        Console.Error.WriteLine("Run 'dependency-guard --help' for the options.");
+        return 2;
+    }
+
+    private static string GetVersion()
+    {
+        string version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                         ?? typeof(Program).Assembly.GetName().Version?.ToString()
+                         ?? "unknown";
+
+        return version.Split('+')[0];
+    }
+
+    internal static string Format(Diagnostic diagnostic)
+    {
+        string severity = diagnostic.Severity == DiagnosticSeverity.Error
+            ? "error"
+            : "warning";
+        string text = $"{severity} {diagnostic.Id}: {diagnostic.GetMessage()}";
+        if (diagnostic.Location == Location.None)
+        {
+            return text;
+        }
+
+        FileLinePositionSpan span = diagnostic.Location.GetMappedLineSpan();
+        return $"{span.Path}({span.StartLinePosition.Line + 1},{span.StartLinePosition.Character + 1}): {text}";
     }
 
     internal static void PrintSuccess(string message)
@@ -53,98 +119,45 @@ internal static partial class Program
         Console.ResetColor();
     }
 
-    internal static bool IsInObjOrBin(string filePath, string projectDir)
+    internal static string? ParseArguments(
+        string[] args,
+        IReadOnlyDictionary<string, Action<string>> valueOptions,
+        IReadOnlyDictionary<string, Action> flags,
+        out string targetPath)
     {
-        string rel = Path.GetRelativePath(projectDir, filePath);
-        return rel.StartsWith("obj" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-               || rel.StartsWith("bin" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
-
-    internal static string? GetContainingNamespace(SyntaxNode node)
-    {
-        SyntaxNode? current = node.Parent;
-        while (current is not null)
+        targetPath = Directory.GetCurrentDirectory();
+        bool hasTarget = false;
+        for (int i = 0; i < args.Length; i++)
         {
-            if (current is BaseNamespaceDeclarationSyntax ns)
+            string arg = args[i];
+            if (valueOptions.TryGetValue(arg, out Action<string>? setValue))
             {
-                return ns.Name.ToString();
+                if (i + 1 >= args.Length)
+                {
+                    return $"{arg} needs a value.";
+                }
+
+                setValue(args[++i]);
             }
-
-            current = current.Parent;
-        }
-
-        if (node.SyntaxTree.GetRoot() is CompilationUnitSyntax cu)
-        {
-            return cu.Members.OfType<FileScopedNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();
+            else if (flags.TryGetValue(arg, out Action? setFlag))
+            {
+                setFlag();
+            }
+            else if (arg.StartsWith("-", StringComparison.Ordinal) && arg.Length > 1)
+            {
+                return $"Unknown option: {arg}";
+            }
+            else if (hasTarget)
+            {
+                return $"More than one target: {targetPath} and {arg}";
+            }
+            else
+            {
+                targetPath = Path.GetFullPath(arg);
+                hasTarget = true;
+            }
         }
 
         return null;
     }
-
-    internal static bool TryResolveProjectFiles(string targetPath, out List<string> projectFiles, out string? error)
-    {
-        projectFiles = [];
-        error = null;
-
-        if (Directory.Exists(targetPath))
-        {
-            projectFiles = [.. Directory.GetFiles(targetPath, "*.csproj", SearchOption.TopDirectoryOnly)];
-            if (projectFiles.Count == 0)
-            {
-                error = $"No .csproj found in: {targetPath}";
-            }
-
-            return projectFiles.Count > 0;
-        }
-
-        if (!File.Exists(targetPath))
-        {
-            error = $"File not found: {targetPath}";
-            return false;
-        }
-
-        if (targetPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
-        {
-            projectFiles = ParseSlnx(targetPath);
-        }
-        else if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
-        {
-            projectFiles = ParseSln(targetPath);
-        }
-        else if (targetPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-        {
-            projectFiles = [targetPath];
-        }
-        else
-        {
-            error = $"Expected a .csproj, .sln, .slnx, or directory. Got: {targetPath}";
-            return false;
-        }
-
-        return true;
-    }
-
-    private static List<string> ParseSlnx(string path)
-    {
-        string dir = Path.GetDirectoryName(path)!;
-        return XDocument.Load(path)
-            .Descendants("Project")
-            .Select(e => e.Attribute("Path")?.Value)
-            .Where(p => p is not null && p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-            .Select(p => Path.GetFullPath(Path.Combine(dir, p!.Replace('/', Path.DirectorySeparatorChar))))
-            .ToList();
-    }
-
-    private static List<string> ParseSln(string path)
-    {
-        string dir = Path.GetDirectoryName(path)!;
-        return File.ReadLines(path)
-            .Select(line => CreateProjectMatcherRegex().Match(line))
-            .Where(m => m.Success)
-            .Select(m => Path.GetFullPath(Path.Combine(dir, m.Groups[1].Value.Replace('\\', Path.DirectorySeparatorChar))))
-            .ToList();
-    }
-
-    [GeneratedRegex(@"Project\(.*?\) = ""[^""]+"", ""([^""]+\.csproj)""")]
-    private static partial Regex CreateProjectMatcherRegex();
 }

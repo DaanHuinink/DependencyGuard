@@ -141,104 +141,6 @@ public sealed class TestsDependencyRuleSetParserYaml
     }
 
     [Test]
-    public void Parse_ShouldCreateExposedToRule_WhenExposedToSectionHasSingleEntry()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Namespace, Is.EqualTo("MyApp.Infra"));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers[0], Is.EqualTo("MyApp.Application"));
-    }
-
-    [Test]
-    public void Parse_ShouldCreateEveryConsumer_WhenExposedToEntryHasMultipleConsumers()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-                  - MyApp.Worker
-                  - MyApp.Admin
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(3));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Does.Contain("MyApp.Worker"));
-    }
-
-    [Test]
-    public void Parse_ShouldCreateExposedToRulesInOrder_WhenExposedToSectionHasMultipleEntries()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra.Database
-                consumers:
-                  - MyApp.Application
-              - namespace: MyApp.Infra.Messaging
-                consumers:
-                  - MyApp.Worker
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(2));
-        Assert.That(ruleSet.ExposedToRules![0].Namespace, Is.EqualTo("MyApp.Infra.Database"));
-        Assert.That(ruleSet.ExposedToRules![1].Namespace, Is.EqualTo("MyApp.Infra.Messaging"));
-    }
-
-    [Test]
-    public void Parse_ShouldReturnNoExposedToRules_WhenExposedToSectionIsMissing()
-    {
-        // Arrange
-        const string yaml = """
-            allowed:
-              - from: App
-                to: Domain
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules ?? [], Is.Empty);
-    }
-
-    [Test]
-    public void Parse_ShouldReturnEmptyConsumerList_WhenExposedToEntryHasNoConsumers()
-    {
-        // Arrange
-        const string yaml = """
-            exposedTo:
-              - namespace: MyApp.Infra
-            """;
-
-        // Act
-        DependencyRuleSet ruleSet = _parser.Parse(yaml);
-
-        // Assert
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Is.Empty);
-    }
-
-    [Test]
     public void Parse_ShouldParseEverySection_WhenAllSectionsArePresent()
     {
         // Arrange
@@ -249,11 +151,6 @@ public sealed class TestsDependencyRuleSetParserYaml
             denied:
               - from: App
                 to: System.IO
-            exposedTo:
-              - namespace: Domain.Shared
-                consumers:
-                  - Domain.Orders
-                  - Domain.Customers
             """;
 
         // Act
@@ -261,7 +158,195 @@ public sealed class TestsDependencyRuleSetParserYaml
 
         // Assert
         Assert.That(ruleSet.Rules, Has.Count.EqualTo(2));
-        Assert.That(ruleSet.ExposedToRules, Has.Count.EqualTo(1));
-        Assert.That(ruleSet.ExposedToRules![0].Consumers, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void Parse_ShouldGiveZeroBasedLocations_WhenPathIsGiven()
+    {
+        // Arrange
+        const string yaml = """
+            # rules
+            allowed:
+              - from: App
+                to: Domain
+            """;
+
+        // Act
+        DependencyRuleSet ruleSet = _parser.Parse(yaml, "dependency-guard.yaml");
+
+        // Assert
+        Assert.That(ruleSet.Rules[0].SourceLocation, Is.EqualTo(new SourceLocation("dependency-guard.yaml", 2, 4)));
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenSectionHasNoRules()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+            denied: []
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(
+            exception!.Errors.Select(e => e.Message),
+            Is.EqualTo(new[] { "'allowed' has no rules.", "'denied' has no rules." }));
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenSectionNameIsMisspelled()
+    {
+        // Arrange
+        const string yaml = """
+            allow:
+              - from: App
+                to: Domain
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml, "dependency-guard.yaml"));
+
+        // Assert
+        Assert.That(exception!.Errors, Has.Count.EqualTo(1));
+        Assert.That(exception.Errors[0].Message, Does.Contain("'allow'"));
+        Assert.That(exception.Errors[0].Location, Is.EqualTo(new SourceLocation("dependency-guard.yaml", 0, 0)));
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenRuleKeyIsMisspelled()
+    {
+        // Arrange
+        const string yaml = """
+            denied:
+              - form: App
+                to: System.IO
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml, "dependency-guard.yaml"));
+
+        // Assert
+        Assert.That(exception!.Errors.Select(e => e.Message), Has.Some.Contains("'form'"));
+        Assert.That(exception.Errors.Select(e => e.Message), Has.Some.Contains("no 'from'"));
+        Assert.That(exception.Errors[0].Location!.Line, Is.EqualTo(1));
+    }
+
+    [TestCase("to: Domain", "no 'from'")]
+    [TestCase("from: App", "no 'to'")]
+    [TestCase("from: ''\n    to: Domain", "'from' is empty")]
+    public void Parse_ShouldReportError_WhenRuleIsIncomplete(string rule, string expected)
+    {
+        // Arrange
+        string yaml = $"""
+            allowed:
+              - {rule}
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors.Select(e => e.Message), Has.Some.Contains(expected));
+    }
+
+    [TestCase("MyApp.*.Api")]
+    [TestCase("MyApp*")]
+    [TestCase("MyApp.")]
+    [TestCase("My App")]
+    [TestCase("*")]
+    [TestCase("MyApp..Api")]
+    public void Parse_ShouldReportError_WhenPatternIsNotANamespacePattern(string pattern)
+    {
+        // Arrange
+        string yaml = $"""
+            allowed:
+              - from: App
+                to: "{pattern}"
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors.Select(e => e.Message), Has.Some.Contains("is not a namespace pattern"));
+    }
+
+    [TestCase(".*")]
+    [TestCase("MyApp")]
+    [TestCase("MyApp.Api.*")]
+    [TestCase("MyApp._Internal.V2")]
+    [TestCase("@class.Api")]
+    public void Parse_ShouldAcceptPattern_WhenPatternIsANamespacePattern(string pattern)
+    {
+        // Arrange
+        string yaml = $"""
+            allowed:
+              - from: App
+                to: "{pattern}"
+            """;
+
+        // Act
+        DependencyRuleSet ruleSet = _parser.Parse(yaml);
+
+        // Assert
+        Assert.That(ruleSet.Rules[0].ToNamespace, Is.EqualTo(pattern));
+    }
+
+    [Test]
+    public void Parse_ShouldReportEveryError_WhenFileHasSeveralMistakes()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+              - from: App
+                to: Domain.*.Api
+              - fromm: App
+                to: Domain
+            exposedTo: []
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors, Has.Count.EqualTo(4));
+    }
+
+    [Test]
+    public void Parse_ShouldReportError_WhenRuleIsNotAMapping()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+              - App -> Domain
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml));
+
+        // Assert
+        Assert.That(exception!.Errors[0].Message, Does.Contain("A rule has a 'from' and a 'to'"));
+    }
+
+    [Test]
+    public void Parse_ShouldReportErrorWithLocation_WhenYamlIsMalformed()
+    {
+        // Arrange
+        const string yaml = """
+            allowed:
+              - from: App
+               to: Domain
+            """;
+
+        // Act
+        RuleSetException? exception = Assert.Throws<RuleSetException>(() => _parser.Parse(yaml, "dependency-guard.yaml"));
+
+        // Assert
+        Assert.That(exception!.Errors, Has.Count.EqualTo(1));
+        Assert.That(exception.Errors[0].Location, Is.Not.Null);
+        Assert.That(exception.Message, Does.StartWith("dependency-guard.yaml("));
     }
 }

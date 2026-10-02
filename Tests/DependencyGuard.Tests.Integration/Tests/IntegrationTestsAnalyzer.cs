@@ -9,17 +9,9 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         $"""<PackageReference Include="DependencyGuard.Analyzer" Version="{IntegrationSetupFixture.AnalyzerPackageVersion}" />""";
 
     [SetUp]
-    public void WriteNuGetConfig()
+    public void UseTheFixturesPackage()
     {
-        File.WriteAllText(Path.Combine(TestDirectory, "NuGet.Config"), $"""
-            <?xml version="1.0" encoding="utf-8"?>
-            <configuration>
-              <packageSources>
-                <add key="local" value="{IntegrationSetupFixture.LocalPackagesDir}" />
-                <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-              </packageSources>
-            </configuration>
-            """);
+        WriteNuGetConfig();
     }
 
     [Test]
@@ -138,130 +130,6 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
     }
 
     [Test]
-    public async Task Build_ShouldNotReportDG0001_WhenSourceIsPermittedExposedToConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Namespaces.cs", """
-            namespace MyApp.Infra { }
-            """);
-        WriteSource("UseCase.cs", """
-            namespace MyApp.Application
-            {
-                using MyApp.Infra;
-                public class UseCase { }
-            }
-            """);
-
-        // Act
-        (string output, int exitCode) = await BuildAsync();
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
-        Assert.That(output, Does.Not.Contain("DG0001"), $"Unexpected DG0001. Output:\n{output}");
-    }
-
-    [Test]
-    public async Task Build_ShouldReportDG0001_WhenSourceIsNotPermittedExposedToConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Namespaces.cs", """
-            namespace MyApp.Infra { }
-            """);
-        WriteSource("UiPage.cs", """
-            namespace MyApp.UI
-            {
-                using MyApp.Infra;
-                public class UiPage { }
-            }
-            """);
-
-        // Act
-        (string output, int exitCode) = await BuildAsync();
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
-        Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
-    }
-
-    [Test]
-    public async Task Build_ShouldNotReportDG0001_WhenSourceIsSubNamespaceOfWildcardConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        // Consumer "MyApp.Application.*" covers MyApp.Application and all sub-namespaces
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application.*
-            """);
-        WriteSource("Namespaces.cs", """
-            namespace MyApp.Infra { }
-            """);
-        WriteSource("OrderUseCase.cs", """
-            namespace MyApp.Application.Orders
-            {
-                using MyApp.Infra;
-                public class OrderUseCase { }
-            }
-            """);
-
-        // Act
-        (string output, int exitCode) = await BuildAsync();
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
-        Assert.That(output, Does.Not.Contain("DG0001"), $"Unexpected DG0001. Output:\n{output}");
-    }
-
-    [Test]
-    public async Task Build_ShouldNotReportDG0001_WhenExplicitAllowOverridesExposedTo()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            allowed:
-              - from: MyApp.UI
-                to: MyApp.Infra
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Namespaces.cs", """
-            namespace MyApp.Infra { }
-            """);
-        WriteSource("UiPage.cs", """
-            namespace MyApp.UI
-            {
-                using MyApp.Infra;
-                public class UiPage { }
-            }
-            """);
-
-        // Act
-        (string output, int exitCode) = await BuildAsync();
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
-        Assert.That(output, Does.Not.Contain("DG0001"), $"Unexpected DG0001. Output:\n{output}");
-    }
-
-    [Test]
     public async Task Build_ShouldReportDG0001_WhenUsingNamespaceCarvedOutByDeny()
     {
         // Arrange
@@ -349,39 +217,6 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
     }
 
     [Test]
-    public async Task Build_ShouldFailWithDG0003_WhenExposedToNamespaceIsDuplicated()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Worker
-            """);
-        WriteSource("Namespaces.cs", """
-            namespace MyApp.Infra { }
-            """);
-        WriteSource("Service.cs", """
-            namespace MyApp.Application
-            {
-                using MyApp.Infra;
-                public class Service { }
-            }
-            """);
-
-        // Act
-        (string output, int exitCode) = await BuildAsync();
-
-        // Assert
-        Assert.That(exitCode, Is.Not.EqualTo(0), $"Expected build failure. Output:\n{output}");
-        Assert.That(output, Does.Contain("DG0003"), $"Expected DG0003. Output:\n{output}");
-    }
-
-    [Test]
     public async Task Build_ShouldReportDG0001_WhenFileScopedNamespaceUsesDisallowedDependency()
     {
         // Arrange
@@ -407,6 +242,157 @@ public sealed class IntegrationTestsAnalyzer : IntegrationTestsBase
         // Assert
         Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
         Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldReportDG0001_WhenTypeComesFromImplicitUsings()
+    {
+        // Arrange
+        WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: System
+            """);
+        WriteSource("Reader.cs", """
+            namespace MyApp.Application;
+            public class Reader
+            {
+                public string Read(string path) { return File.ReadAllText(path); }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyApp.Application' to depend on 'System.IO'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldReportDG0001InTheRazorFile_WhenComponentUsesDisallowedNamespace()
+    {
+        // Arrange
+        WriteCsproj("MyProject", sdk: "Microsoft.NET.Sdk.Razor", items: """<FrameworkReference Include="Microsoft.AspNetCore.App" />""");
+        WriteYaml("""
+            allowed:
+              - from: .*
+                to: System.*
+              - from: .*
+                to: Microsoft.*
+            """);
+        WriteSource("Clock.cs", """
+            namespace MyApp.Infrastructure;
+            public static class Clock { public static string Now() { return "now"; } }
+            """);
+        Directory.CreateDirectory(Path.Combine(TestDirectory, "Components"));
+        WriteSource(Path.Combine("Components", "Page.razor"), """
+            @using MyApp.Infrastructure
+            <p>@Clock.Now()</p>
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Page.razor(1,"), $"Expected the using in Page.razor. Output:\n{output}");
+        Assert.That(output, Does.Contain("Page.razor(2,"), $"Expected the use in Page.razor. Output:\n{output}");
+        Assert.That(output, Does.Contain("'MyProject.Components' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldUseTheRootNamespace_WhenCodeHasNoNamespace()
+    {
+        // Arrange
+        WriteCsproj("MyProject", properties: "<OutputType>Exe</OutputType>");
+        WriteYaml("""
+            allowed:
+              - from: MyProject
+                to: MyApp.Domain
+              - from: MyProject
+                to: System
+            """);
+        WriteSource("Domain.cs", """
+            namespace MyApp.Domain { public class Order { } }
+            namespace MyApp.Infrastructure { public class Repository { } }
+            """);
+        WriteSource("Program.cs", """
+            using MyApp.Domain;
+            using MyApp.Infrastructure;
+
+            System.Console.WriteLine(new Order());
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyProject' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+        Assert.That(output, Does.Not.Contain("to depend on 'MyApp.Domain'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldFailWithDG0004AtTheLine_WhenRuleFileHasATypo()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+        WriteYaml("""
+            allowed:
+              - form: MyApp.Application
+                to: MyApp.Domain
+            """);
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            public class Service { }
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        Assert.That(exitCode, Is.Not.EqualTo(0), $"Expected build failure. Output:\n{output}");
+        Assert.That(output, Does.Contain("dependency-guard.yaml(2,5): error DG0004: Unknown key 'form'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Build_ShouldReportDG0001AtTheUse_WhenExtensionMemberComesFromAnotherNamespace()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """);
+        WriteSource("TextExtensions.cs", """
+            namespace MyApp.Infrastructure;
+            public static class TextExtensions
+            {
+                extension(string text)
+                {
+                    public string Shout => text.ToUpperInvariant();
+                }
+            }
+            """);
+        WriteSource("Service.cs", """
+            global using MyApp.Infrastructure;
+            namespace MyApp.Application;
+            public class Service
+            {
+                public string Greet() { return "hello".Shout; }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await BuildAsync();
+
+        // Assert
+        const string expected = "Service.cs(5,44): warning DG0001: No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'";
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain(expected), $"Output:\n{output}");
     }
 
     private Task<(string Output, int ExitCode)> BuildAsync()

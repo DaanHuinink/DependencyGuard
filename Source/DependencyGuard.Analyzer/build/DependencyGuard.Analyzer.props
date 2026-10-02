@@ -6,6 +6,10 @@
     </DependencyGuardConfigPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <CompilerVisibleProperty Include="RootNamespace" />
+  </ItemGroup>
+
   <Target Name="DependencyGuard_AddConfig" BeforeTargets="CoreCompile">
     <ItemGroup>
       <AdditionalFiles Include="@(DependencyGuardConfig)"/>

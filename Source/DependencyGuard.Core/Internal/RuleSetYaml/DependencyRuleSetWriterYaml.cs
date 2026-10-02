@@ -13,28 +13,20 @@ internal sealed class DependencyRuleSetWriterYaml
 
     public string Serialize(DependencyRuleSet ruleSet)
     {
-        RuleSetConfigYaml config = new();
-
-        DependencyRule[] allowed = ruleSet.Rules.Where(r => r.Action == DependencyAction.Allow).ToArray();
-        DependencyRule[] denied = ruleSet.Rules.Where(r => r.Action == DependencyAction.Deny).ToArray();
-
-        if (allowed.Length > 0)
+        RuleSetConfigYaml config = new()
         {
-            config.Allowed = allowed.Select(r => new RuleEntryYaml { From = r.FromNamespace, To = r.ToNamespace }).ToList();
-        }
-
-        if (denied.Length > 0)
-        {
-            config.Denied = denied.Select(r => new RuleEntryYaml { From = r.FromNamespace, To = r.ToNamespace }).ToList();
-        }
-
-        if (ruleSet.ExposedToRules is { Count: > 0 })
-        {
-            config.ExposedTo = ruleSet.ExposedToRules
-                .Select(e => new ExposedToEntryYaml { Namespace = e.Namespace, Consumers = [.. e.Consumers] })
-                .ToList();
-        }
+            Allowed = GetEntries(ruleSet, DependencyAction.Allow),
+            Denied = GetEntries(ruleSet, DependencyAction.Deny),
+        };
 
         return Serializer.Serialize(config);
+    }
+
+    private static RuleEntryYaml[] GetEntries(DependencyRuleSet ruleSet, DependencyAction action)
+    {
+        return ruleSet.Rules
+            .Where(r => r.Action == action)
+            .Select(r => new RuleEntryYaml { From = r.FromNamespace, To = r.ToNamespace })
+            .ToArray();
     }
 }

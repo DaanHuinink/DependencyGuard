@@ -1,3 +1,4 @@
+using DependencyGuard.Core.Composition;
 using DependencyGuard.Core.Interfaces;
 using NUnit.Framework;
 
@@ -50,23 +51,6 @@ public sealed class TestsDependencyRuleSetWriterYaml
     }
 
     [Test]
-    public void SerializeToYaml_ShouldRoundTrip_WhenRuleSetContainsExposedToRule()
-    {
-        // Arrange
-        DependencyRuleSet original = new(
-            [],
-            [new ExposedToRule("MyApp.Infra", ["MyApp.Application", "MyApp.Worker"])]);
-
-        // Act
-        DependencyRuleSet result = RoundTrip(original);
-
-        // Assert
-        Assert.That(result.ExposedToRules, Has.Count.EqualTo(1));
-        Assert.That(result.ExposedToRules![0].Namespace, Is.EqualTo("MyApp.Infra"));
-        Assert.That(result.ExposedToRules[0].Consumers, Has.Count.EqualTo(2));
-    }
-
-    [Test]
     public void SerializeToYaml_ShouldProduceParsableYaml_WhenRuleSetIsEmpty()
     {
         // Arrange
@@ -78,7 +62,6 @@ public sealed class TestsDependencyRuleSetWriterYaml
 
         // Assert
         Assert.That(result.Rules, Is.Empty);
-        Assert.That(result.ExposedToRules, Is.Null.Or.Empty);
     }
 
     [Test]

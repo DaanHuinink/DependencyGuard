@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="DependencyGuard.Analyzer" Version="0.1.0-dev.20260913134747" />
+    <PackageVersion Include="DependencyGuard.Analyzer" Version="0.2.0-dev.20260929191457" />
   </ItemGroup>
 
 </Project>

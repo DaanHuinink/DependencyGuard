@@ -9,7 +9,6 @@ internal sealed class DependencyAnalyzer(DependencyRuleSet ruleSet) : IDependenc
         string source = dependency.SourceNamespace;
         string target = dependency.TargetNamespace;
 
-        // Priority 1: explicit allowed/denied rule.
         // When multiple rules match, the most specific `to` pattern wins; `from` is the tiebreaker.
         DependencyRule? explicitRule = ruleSet.Rules
             .Where(r => NamespaceMatches(source, r.FromNamespace)
@@ -23,28 +22,6 @@ internal sealed class DependencyAnalyzer(DependencyRuleSet ruleSet) : IDependenc
             return ToRuleResult(explicitRule, source, target);
         }
 
-        // Priority 2: exposedTo, which restricts which namespaces may consume the target.
-        ExposedToRule? applicableExposedTo = (ruleSet.ExposedToRules ?? [])
-            .Where(e => NamespaceMatches(target, e.Namespace))
-            .OrderByDescending(e => PatternBaseLength(e.Namespace))
-            .FirstOrDefault();
-
-        if (applicableExposedTo is not null)
-        {
-            bool isPermittedConsumer = applicableExposedTo.Consumers
-                .Any(c => NamespaceMatches(source, c));
-
-            if (!isPermittedConsumer)
-            {
-                string consumers = string.Join(", ", applicableExposedTo.Consumers.Select(c => $"'{c}'"));
-                return new(false,
-                    $"'{applicableExposedTo.Namespace}' is only accessible to {consumers}; " +
-                    $"'{source}' is not a permitted consumer.");
-            }
-
-            return new(true, null);
-        }
-
         return new(false, $"No rule allows '{source}' to depend on '{target}'.");
     }
 
@@ -54,7 +31,6 @@ internal sealed class DependencyAnalyzer(DependencyRuleSet ruleSet) : IDependenc
             ? new(true, null)
             : new(false, $"Dependency from '{source}' to '{target}' is explicitly denied.", rule.SourceLocation);
     }
-
 
     private static bool NamespaceMatches(string subject, string pattern)
     {

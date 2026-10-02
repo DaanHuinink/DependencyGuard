@@ -1,8 +1,9 @@
+using DependencyGuard.Core.Interfaces;
 using DependencyGuard.Core.Internal.Analyzer;
 using DependencyGuard.Core.Internal.RuleSetYaml;
 using DependencyGuard.Core.Internal.Validation;
 
-namespace DependencyGuard.Core.Interfaces;
+namespace DependencyGuard.Core.Composition;
 
 public static class DependencyGuardFactory
 {
@@ -59,10 +60,6 @@ public static class DependencyGuardFactory
             .SelectMany(r => r.Rules)
             .ToArray();
 
-        ExposedToRule[] exposedTo = ruleSets
-            .SelectMany(r => r.ExposedToRules ?? [])
-            .ToArray();
-
-        return new(rules, exposedTo);
+        return new(rules);
     }
 }

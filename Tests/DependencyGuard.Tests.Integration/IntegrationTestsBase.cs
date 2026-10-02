@@ -30,16 +30,18 @@ public abstract class IntegrationTestsBase
         }
     }
 
-    protected void WriteCsproj(string name, string? dir = null)
+    protected void WriteCsproj(string name, string? dir = null, string properties = "", string sdk = "Microsoft.NET.Sdk", string items = "")
     {
         File.WriteAllText(Path.Combine(dir ?? TestDirectory, $"{name}.csproj"), $"""
-            <Project Sdk="Microsoft.NET.Sdk">
+            <Project Sdk="{sdk}">
               <PropertyGroup>
                 <TargetFramework>net10.0</TargetFramework>
                 <Nullable>enable</Nullable>
+                {properties}
               </PropertyGroup>
               <ItemGroup>
                 {ProjectItems}
+                {items}
               </ItemGroup>
             </Project>
             """);
@@ -55,11 +57,35 @@ public abstract class IntegrationTestsBase
         File.WriteAllText(Path.Combine(dir ?? TestDirectory, filename), content);
     }
 
+    protected void WriteNuGetConfig(string? dir = null)
+    {
+        File.WriteAllText(Path.Combine(dir ?? TestDirectory, "NuGet.Config"), $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <configuration>
+              <config>
+                <add key="globalPackagesFolder" value="{Path.Combine(IntegrationSetupFixture.LocalPackagesDir, "packages")}" />
+              </config>
+              <packageSources>
+                <add key="local" value="{IntegrationSetupFixture.LocalPackagesDir}" />
+                <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+              </packageSources>
+            </configuration>
+            """);
+    }
+
+    protected void WriteReferencedNamespaces(string? dir = null)
+    {
+        WriteSource("ReferencedNamespaces.cs", """
+            namespace MyApp.Domain { public class Order { } }
+            namespace MyApp.Infrastructure { public class Repository { } }
+            """, dir);
+    }
+
     // The CLI is built once by IntegrationSetupFixture, so every run can skip the build.
     protected static Task<(string Output, int ExitCode)> RunCliAsync(string arguments)
     {
         return IntegrationSetupFixture.RunAsync(
             "dotnet",
-            $"run --no-build --project \"{IntegrationSetupFixture.ToolProjectPath}\" -- {arguments}");
+            $"\"{IntegrationSetupFixture.ToolAssemblyPath}\" {arguments}");
     }
 }

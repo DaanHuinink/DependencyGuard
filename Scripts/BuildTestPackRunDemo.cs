@@ -96,7 +96,11 @@ static void CheckAnalyzerDiagnostics(DemoProject[] projects, string buildOutput)
     Regex diagnostic = new(@"(?<severity>warning|error) (?<id>DG\d{4}):.*\[(?<project>[^\]]+\.csproj)\]");
 
     List<(string Project, string Id, string Line)> found = [];
-    foreach (string line in buildOutput.Split('\n').Select(l => l.Trim()).Distinct())
+    IEnumerable<string> lines = buildOutput
+        .Split('\n')
+        .Select(l => l.Trim())
+        .Distinct();
+    foreach (string line in lines)
     {
         Match match = diagnostic.Match(line);
         if (match.Success)
@@ -114,7 +118,10 @@ static void CheckAnalyzerDiagnostics(DemoProject[] projects, string buildOutput)
         Console.WriteLine($"  {project.Name}: {violations} x DG0001");
     }
 
-    string[] unexpected = found.Where(d => d.Id != "DG0001").Select(d => d.Line).ToArray();
+    string[] unexpected = found
+        .Where(d => d.Id != "DG0001")
+        .Select(d => d.Line)
+        .ToArray();
     if (unexpected.Length > 0)
     {
         throw new InvalidOperationException(
@@ -198,7 +205,7 @@ static void CheckCliResults(DemoProject[] projects, string output)
     foreach (DemoProject project in projects)
     {
         string result = skippedProjects.Contains(project.Name)
-            ? "skipped (no dependency-guard.yaml of its own; the CLI does not read MSBuild settings)"
+            ? "skipped (no rule file)"
             : $"{violations.GetValueOrDefault(project.Name)} x DG0001";
         Console.WriteLine($"  {project.Name}: {result}");
     }

@@ -3,6 +3,13 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
+
+    <PackageId>DependencyGuard.Core</PackageId>
+    <Version>0.2.0-beta.7</Version>
+    <Authors>Daan Huinink</Authors>
+    <Description>The rules engine of DependencyGuard: read a dependency-guard.yaml and ask whether one namespace may depend on another.</Description>
+    <PackageTags>architecture;dependencies;namespace</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>

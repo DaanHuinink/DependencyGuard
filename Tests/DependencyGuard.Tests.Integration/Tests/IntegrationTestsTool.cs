@@ -5,6 +5,12 @@ namespace DependencyGuard.Tests.Integration.Tests;
 [TestFixture]
 public sealed class IntegrationTestsTool : IntegrationTestsBase
 {
+    [SetUp]
+    public void WriteNamespaces()
+    {
+        WriteReferencedNamespaces();
+    }
+
     [Test]
     public async Task Tool_ShouldExitWithCode1AndReportDG0001_WhenDependencyIsNotAllowed()
     {
@@ -80,7 +86,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
     }
 
     [Test]
-    public async Task Tool_ShouldUseConfigFromFlag_WhenProjectHasItsOwnConfig()
+    public async Task Tool_ShouldMergeConfigFromFlagWithProjectConfig_WhenProjectHasItsOwnConfig()
     {
         // Arrange
         string configPath = Path.Combine(TestDirectory, "global.yaml");
@@ -90,7 +96,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
                 to: MyApp.Domain
             """);
 
-        // The project's own config allows the dependency; the --config file does not.
+        // The project's own config allows the dependency. The --config file adds its rules to it.
         string projectDir = Path.Combine(TestDirectory, "project");
         Directory.CreateDirectory(projectDir);
         WriteCsproj("MyProject", projectDir);
@@ -99,6 +105,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
               - from: MyApp.Application
                 to: MyApp.Infrastructure
             """, projectDir);
+        WriteReferencedNamespaces(projectDir);
         WriteSource("OrderService.cs", """
             namespace MyApp.Application;
             using MyApp.Infrastructure;
@@ -109,8 +116,8 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
         (string output, int exitCode) = await RunToolAsync(projectDir, $"--config \"{configPath}\"");
 
         // Assert
-        Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
-        Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
+        Assert.That(exitCode, Is.EqualTo(0), $"Expected clean exit. Output:\n{output}");
+        Assert.That(output, Does.Not.Contain("DG0001"), $"Output:\n{output}");
     }
 
     [Test]
@@ -176,57 +183,7 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
 
         // Assert
         Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
-        Assert.That(output, Does.Contain("failed to parse config"), $"Expected parse error. Output:\n{output}");
-    }
-
-    [Test]
-    public async Task Tool_ShouldExitWithCode1_WhenSourceIsNotPermittedExposedToConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Source.cs", """
-            namespace MyApp.UI;
-            using MyApp.Infra;
-            public class UiPage { }
-            """);
-
-        // Act
-        (string output, int exitCode) = await RunToolAsync(TestDirectory);
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
-        Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
-    }
-
-    [Test]
-    public async Task Tool_ShouldExitWithCode0_WhenSourceIsPermittedExposedToConsumer()
-    {
-        // Arrange
-        WriteCsproj("MyProject");
-        WriteYaml("""
-            exposedTo:
-              - namespace: MyApp.Infra
-                consumers:
-                  - MyApp.Application
-            """);
-        WriteSource("Source.cs", """
-            namespace MyApp.Application;
-            using MyApp.Infra;
-            public class UseCase { }
-            """);
-
-        // Act
-        (string output, int exitCode) = await RunToolAsync(TestDirectory);
-
-        // Assert
-        Assert.That(exitCode, Is.EqualTo(0), $"Expected clean exit. Output:\n{output}");
-        Assert.That(output, Does.Not.Contain("DG0001"));
+        Assert.That(output, Does.Contain("error DG0004"), $"Expected a DG0004 for the rule file. Output:\n{output}");
     }
 
     [Test]
@@ -303,6 +260,244 @@ public sealed class IntegrationTestsTool : IntegrationTestsBase
         // Assert
         Assert.That(exitCode, Is.EqualTo(1), $"Expected exit code 1. Output:\n{output}");
         Assert.That(output, Does.Contain("DG0001"), $"Expected DG0001. Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldShowUsageAndExitWithCode0_WhenHelpIsAsked()
+    {
+        // Act
+        (string output, int exitCode) = await RunCliAsync("--help");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Usage:"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldShowTheVersion_WhenVersionIsAsked()
+    {
+        // Act
+        (string output, int exitCode) = await RunCliAsync("--version");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+        Assert.That(output.Trim(), Does.Match(@"^\d+\.\d+\.\d+"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldExitWithCode2_WhenOptionIsUnknown()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory, "--confg rules.yaml");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(2), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Unknown option: --confg"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldMergeEveryConfigFromFlags_WhenFlagIsRepeated()
+    {
+        // Arrange
+        string domainRules = Path.Combine(TestDirectory, "domain.yaml");
+        File.WriteAllText(domainRules, """
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """);
+        string infrastructureRules = Path.Combine(TestDirectory, "infrastructure.yaml");
+        File.WriteAllText(infrastructureRules, """
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Infrastructure
+            """);
+        WriteCsproj("MyProject");
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            using MyApp.Domain;
+            using MyApp.Infrastructure;
+            public class Service { }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory, $"-c \"{domainRules}\" --config \"{infrastructureRules}\"");
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(0), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldUseTheProjectName_WhenFileHasNoNamespace()
+    {
+        // Arrange
+        WriteCsproj("MyProject", properties: "<OutputType>Exe</OutputType>");
+        WriteYaml("""
+            allowed:
+              - from: MyProject
+                to: MyApp.Domain
+            """);
+        WriteSource("Program.cs", """
+            using MyApp.Domain;
+            using MyApp.Infrastructure;
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyProject' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+        Assert.That(output, Does.Not.Contain("to depend on 'MyApp.Domain'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldReportTheLine_WhenRuleFileHasATypo()
+    {
+        // Arrange
+        WriteCsproj("MyProject");
+        WriteYaml("""
+            denied:
+              - from: MyApp.Application
+                too: System.IO
+            """);
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            public class Service { }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("dependency-guard.yaml(3,5): error DG0004: Unknown key 'too'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldReportTheUseInTheRazorFile_WhenComponentUsesDisallowedNamespace()
+    {
+        // Arrange
+        WriteCsproj("MyProject", sdk: "Microsoft.NET.Sdk.Razor", items: """<FrameworkReference Include="Microsoft.AspNetCore.App" />""");
+        WriteYaml("""
+            allowed:
+              - from: .*
+                to: System.*
+              - from: .*
+                to: Microsoft.*
+            """);
+        WriteSource("Clock.cs", """
+            namespace MyApp.Infrastructure;
+            public static class Clock { public static string Now() { return "now"; } }
+            """);
+        Directory.CreateDirectory(Path.Combine(TestDirectory, "Components"));
+        WriteSource(Path.Combine("Components", "Page.razor"), """
+            @using MyApp.Infrastructure
+            <p>@Clock.Now()</p>
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Page.razor(2,"), $"Expected the use in Page.razor. Output:\n{output}");
+        Assert.That(output, Does.Contain("'MyProject.Components' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldReportDG0001_WhenTypeComesFromImplicitUsings()
+    {
+        // Arrange
+        WriteCsproj("MyProject", properties: "<ImplicitUsings>enable</ImplicitUsings>");
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: System
+            """);
+        WriteSource("Reader.cs", """
+            namespace MyApp.Application;
+            public class Reader
+            {
+                public string Read(string path) { return File.ReadAllText(path); }
+            }
+            """);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(TestDirectory);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyApp.Application' to depend on 'System.IO'"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldCheckALinkedFile_WhenProjectCompilesASourceFromElsewhere()
+    {
+        // Arrange
+        string projectDir = Path.Combine(TestDirectory, "project");
+        string sharedDir = Path.Combine(TestDirectory, "shared");
+        Directory.CreateDirectory(projectDir);
+        Directory.CreateDirectory(sharedDir);
+        WriteCsproj("MyProject", projectDir, items: """<Compile Include="..\shared\Clock.cs" Link="shared\Clock.cs" />""");
+        WriteReferencedNamespaces(projectDir);
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """, projectDir);
+        WriteSource("Clock.cs", """
+            namespace MyApp.Application;
+            public class Clock { private MyApp.Infrastructure.Repository? _repository; }
+            """, sharedDir);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(projectDir);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("Clock.cs(2,"), $"Output:\n{output}");
+    }
+
+    [Test]
+    public async Task Tool_ShouldUseTheRuleFilesOfTheBuild_WhenMSBuildGivesThemToTheProject()
+    {
+        // Arrange
+        WriteNuGetConfig();
+        string rules = Path.Combine(TestDirectory, "rules");
+        string projectDir = Path.Combine(TestDirectory, "project");
+        Directory.CreateDirectory(rules);
+        Directory.CreateDirectory(projectDir);
+        WriteYaml("""
+            allowed:
+              - from: MyApp.Application
+                to: MyApp.Domain
+            """, rules);
+        File.WriteAllText(Path.Combine(TestDirectory, "Directory.Build.props"), """
+            <Project>
+              <ItemGroup>
+                <DependencyGuardConfig Include="$(MSBuildThisFileDirectory)rules\dependency-guard.yaml" />
+              </ItemGroup>
+            </Project>
+            """);
+        string version = IntegrationSetupFixture.AnalyzerPackageVersion;
+        string analyzerPackage = $"""<PackageReference Include="DependencyGuard.Analyzer" Version="{version}" />""";
+        WriteCsproj("MyProject", projectDir, items: analyzerPackage);
+        WriteReferencedNamespaces(projectDir);
+        WriteSource("Service.cs", """
+            namespace MyApp.Application;
+            using MyApp.Infrastructure;
+            public class Service { }
+            """, projectDir);
+
+        // Act
+        (string output, int exitCode) = await RunToolAsync(projectDir);
+
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(1), $"Output:\n{output}");
+        Assert.That(output, Does.Contain("No rule allows 'MyApp.Application' to depend on 'MyApp.Infrastructure'"), $"Output:\n{output}");
     }
 
     private static Task<(string Output, int ExitCode)> RunToolAsync(string targetPath, string extraArgs = "")

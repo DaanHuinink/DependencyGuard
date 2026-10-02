@@ -1,13 +1,15 @@
+using DependencyGuard.Roslyn.Interfaces;
 using Microsoft.CodeAnalysis;
 
-namespace DependencyGuard.Analyzer;
+namespace DependencyGuard.Roslyn.Internal;
 
-internal static class AnalyzerDiagnostics
+internal static class DependencyRoslynAnalyzerDiagnostics
 {
     public static readonly DiagnosticDescriptor WarningConfigurationMissing = new(
         id: "DG0000",
         title: "DependencyGuard configuration not found",
-        messageFormat: $"No '{Analyzer.ConfigFileName}' additional file found. Add it to AdditionalFiles in your project file.",
+        messageFormat: $"No '{DependencyRoslynAnalyzerContract.ConfigFileName}' additional file found. " +
+                       "Add it to AdditionalFiles in your project file.",
         category: "Architecture",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -31,9 +33,9 @@ internal static class AnalyzerDiagnostics
         isEnabledByDefault: true,
         customTags: [WellKnownDiagnosticTags.CompilationEnd]);
 
-    public static readonly DiagnosticDescriptor ErrorFailedToParseYaml = new(
+    public static readonly DiagnosticDescriptor ErrorInvalidRuleFile = new(
         id: "DG0004",
-        title: "Failed to parse YAML",
+        title: "Invalid rule file",
         messageFormat: "{0}",
         category: "Architecture",
         defaultSeverity: DiagnosticSeverity.Error,

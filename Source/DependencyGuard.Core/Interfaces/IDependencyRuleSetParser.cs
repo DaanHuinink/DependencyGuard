@@ -11,8 +11,7 @@ public sealed record SourceLocation(string FilePath, int Line, int Column);
 
 public sealed record DependencyRuleSet
 (
-    IReadOnlyList<DependencyRule> Rules,
-    IReadOnlyList<ExposedToRule>? ExposedToRules = null
+    IReadOnlyList<DependencyRule> Rules
 );
 
 public sealed record DependencyRule
@@ -23,11 +22,19 @@ public sealed record DependencyRule
     SourceLocation? SourceLocation = null
 );
 
-public sealed record ExposedToRule
-(
-    string Namespace,
-    IReadOnlyList<string> Consumers,
-    SourceLocation? SourceLocation = null);
+public sealed record RuleSetError(string Message, SourceLocation? Location = null);
+
+public sealed class RuleSetException(IReadOnlyList<RuleSetError> errors) : Exception(Describe(errors))
+{
+    public IReadOnlyList<RuleSetError> Errors { get; } = errors;
+
+    private static string Describe(IReadOnlyList<RuleSetError> errors)
+    {
+        return string.Join(Environment.NewLine, errors.Select(e => e.Location is null
+            ? e.Message
+            : $"{e.Location.FilePath}({e.Location.Line + 1},{e.Location.Column + 1}): {e.Message}"));
+    }
+}
 
 public interface IDependencyRuleSetParser
 {

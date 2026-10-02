@@ -6,36 +6,39 @@ internal sealed class RuleSetValidator
 {
     public IReadOnlyList<RuleConflict> Validate(DependencyRuleSet ruleSet)
     {
-        List<RuleConflict> conflicts = [];
-
-        ValidateExactRuleConflicts(ruleSet, conflicts);
-        ValidateCrossingSpecificityConflicts(ruleSet, conflicts);
-        ValidateEqualSpecificityConflicts(ruleSet, conflicts);
-        ValidateExposedToConflicts(ruleSet, conflicts);
-
-        return conflicts;
+        return ValidateExactRuleConflicts(ruleSet)
+            .Concat(ValidateCrossingSpecificityConflicts(ruleSet))
+            .Concat(ValidateEqualSpecificityConflicts(ruleSet))
+            .ToArray();
     }
 
-    private static void ValidateExactRuleConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static IEnumerable<RuleConflict> ValidateExactRuleConflicts(DependencyRuleSet ruleSet)
     {
         foreach (IGrouping<(string, string), DependencyRule> group in ruleSet.Rules
             .GroupBy(r => (r.FromNamespace, r.ToNamespace))
-            .Where(g => g.Select(r => r.Action).Distinct().Count() > 1))
+            .Where(g => g
+                .Select(r => r.Action)
+                .Distinct()
+                .Count() > 1))
         {
             DependencyRule allow = group.First(r => r.Action == DependencyAction.Allow);
             DependencyRule deny = group.First(r => r.Action == DependencyAction.Deny);
             string msg = $"Rule for '{group.Key.Item1}' → '{group.Key.Item2}' is declared as both allowed and denied.";
-            conflicts.Add(new(msg, allow.SourceLocation, deny.SourceLocation));
+            yield return new(msg, allow.SourceLocation, deny.SourceLocation);
         }
     }
 
-    private static void ValidateCrossingSpecificityConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static IEnumerable<RuleConflict> ValidateCrossingSpecificityConflicts(DependencyRuleSet ruleSet)
     {
         // Rules are ranked by TO length first, then FROM length. When an allow and a deny
         // have "crossed" specificity (one is more specific in FROM, the other in TO), the
         // TO-wins ordering produces unintuitive results for the intersection of their ranges.
-        DependencyRule[] allows = ruleSet.Rules.Where(r => r.Action == DependencyAction.Allow).ToArray();
-        DependencyRule[] denies = ruleSet.Rules.Where(r => r.Action == DependencyAction.Deny).ToArray();
+        DependencyRule[] allows = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Allow)
+            .ToArray();
+        DependencyRule[] denies = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Deny)
+            .ToArray();
 
         foreach (DependencyRule allow in allows)
         {
@@ -45,45 +48,49 @@ internal sealed class RuleSetValidator
                 //         deny TO is more specific (child of allow TO).
                 //         → deny wins for (allow.FROM → deny.TO) even though allow explicitly
                 //           targets the narrower source namespace.
-                if (PatternBaseIsStrictPrefix(deny.FromNamespace, allow.FromNamespace) &&
-                    PatternBaseIsStrictPrefix(allow.ToNamespace, deny.ToNamespace))
+                if (IsWildcardParentOf(deny.FromNamespace, allow.FromNamespace) &&
+                    IsWildcardParentOf(allow.ToNamespace, deny.ToNamespace))
                 {
-                    conflicts.Add(new(
+                    yield return new(
                         $"Allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}') is overridden by " +
                         $"deny rule ('from: {deny.FromNamespace}, to: {deny.ToNamespace}'): for dependencies " +
                         $"from '{allow.FromNamespace}' to '{deny.ToNamespace}', the deny wins because its " +
                         $"target namespace is more specific, despite the allow having a more specific source.",
                         allow.SourceLocation,
-                        deny.SourceLocation));
+                        deny.SourceLocation);
                 }
 
                 // Case B: deny FROM is more specific (child of allow FROM),
                 //         allow TO is more specific (child of deny TO).
                 //         → allow wins for (deny.FROM → allow.TO) even though deny explicitly
                 //           targets the narrower source namespace.
-                if (PatternBaseIsStrictPrefix(allow.FromNamespace, deny.FromNamespace) &&
-                    PatternBaseIsStrictPrefix(deny.ToNamespace, allow.ToNamespace))
+                if (IsWildcardParentOf(allow.FromNamespace, deny.FromNamespace) &&
+                    IsWildcardParentOf(deny.ToNamespace, allow.ToNamespace))
                 {
-                    conflicts.Add(new(
+                    yield return new(
                         $"Deny rule ('from: {deny.FromNamespace}, to: {deny.ToNamespace}') is overridden by " +
                         $"allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}'): for dependencies " +
                         $"from '{deny.FromNamespace}' to '{allow.ToNamespace}', the allow wins because its " +
                         $"target namespace is more specific, despite the deny having a more specific source.",
                         deny.SourceLocation,
-                        allow.SourceLocation));
+                        allow.SourceLocation);
                 }
             }
         }
     }
 
-    private static void ValidateEqualSpecificityConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static IEnumerable<RuleConflict> ValidateEqualSpecificityConflicts(DependencyRuleSet ruleSet)
     {
         // An allow and a deny whose FROM and TO pattern bases are identical both match the base
         // namespaces themselves (e.g. `System` and `System.*` both match `System`) and tie on
         // specificity, so declaration order would silently decide which one wins.
         // Identical (from, to) pairs are already reported by ValidateExactRuleConflicts.
-        DependencyRule[] allows = ruleSet.Rules.Where(r => r.Action == DependencyAction.Allow).ToArray();
-        DependencyRule[] denies = ruleSet.Rules.Where(r => r.Action == DependencyAction.Deny).ToArray();
+        DependencyRule[] allows = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Allow)
+            .ToArray();
+        DependencyRule[] denies = ruleSet.Rules
+            .Where(r => r.Action == DependencyAction.Deny)
+            .ToArray();
 
         foreach (DependencyRule allow in allows)
         {
@@ -99,38 +106,29 @@ internal sealed class RuleSetValidator
                     continue;
                 }
 
-                conflicts.Add(new(
+                yield return new(
                     $"Allow rule ('from: {allow.FromNamespace}, to: {allow.ToNamespace}') and deny rule " +
                     $"('from: {deny.FromNamespace}, to: {deny.ToNamespace}') are equally specific: for dependencies " +
                     $"from '{GetPatternBase(allow.FromNamespace)}' to '{GetPatternBase(allow.ToNamespace)}', " +
                     $"declaration order would decide which one wins.",
                     allow.SourceLocation,
-                    deny.SourceLocation));
+                    deny.SourceLocation);
             }
         }
     }
 
-    private static void ValidateExposedToConflicts(DependencyRuleSet ruleSet, List<RuleConflict> conflicts)
+    private static bool IsWildcardParentOf(string ancestor, string descendant)
     {
-        foreach (IGrouping<string, ExposedToRule> group in (ruleSet.ExposedToRules ?? [])
-            .GroupBy(e => e.Namespace, StringComparer.Ordinal)
-            .Where(g => g.Count() > 1))
+        if (!ancestor.EndsWith(".*", StringComparison.Ordinal))
         {
-            ExposedToRule first = group.First();
-            ExposedToRule second = group.Skip(1).First();
-            conflicts.Add(new(
-                $"Namespace '{group.Key}' has multiple exposedTo entries. Merge them into a single entry.",
-                first.SourceLocation,
-                second.SourceLocation));
+            return false;
         }
-    }
 
-    // Compares pattern bases (stripping `.*` suffix) so wildcard patterns are treated correctly.
-    private static bool PatternBaseIsStrictPrefix(string ancestor, string descendant)
-    {
         string a = GetPatternBase(ancestor);
         string d = GetPatternBase(descendant);
-        return d.StartsWith(a + ".", StringComparison.Ordinal);
+        return a.Length == 0
+            ? d.Length > 0
+            : d.StartsWith(a + ".", StringComparison.Ordinal);
     }
 
     private static bool HaveSamePatternBase(string first, string second)
